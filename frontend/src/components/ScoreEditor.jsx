@@ -163,7 +163,9 @@ export default function ScoreEditor({
           })
           voice.setMode(Voice.Mode.SOFT)
           voice.addTickables(staveNotes)
-          new Formatter()
+          // softmaxFactor既定値(10)だと音価による間隔差が弱く、8分・16分音符の
+          // 長さの違いが見た目で分かりにくいため引き上げる（設計書 17.2）
+          new Formatter({ softmaxFactor: 100 })
             .joinVoices([voice])
             .format([voice], entry.width - (indexInSystem === 0 ? FIRST_MEASURE_EXTRA + 20 : 30))
           voice.draw(context, stave)
@@ -256,27 +258,33 @@ export default function ScoreEditor({
 
   const handleMouseDown = (event) => {
     const position = pointerPosition(event)
-    const hit = findNoteAt(position)
+    const chordInsertion = chordMode || event.altKey
 
-    if (hit) {
-      const additive = event.shiftKey
-      onSelectionChange(hit.id, { additive })
-      const note = score.notes.find((item) => item.id === hit.id)
-      if (note && !note.isRest) {
-        dragRef.current = {
-          id: hit.id,
-          stave: hit.stave,
-          startDiatonic: diatonicIndex(note.pitchName, note.octave),
-          startY: position.y,
-          moved: false,
+    // 和音モードでは、既存の音符のヒット判定（縦方向にかなり広い当たり判定を持つ）が
+    // 「同じ拍・別の高さ」へのクリックを横取りしてしまい、和音を追加できなくなる。
+    // そのため和音モード中は既存音符の選択・ドラッグを行わず、常に和音追加として扱う。
+    if (!chordInsertion) {
+      const hit = findNoteAt(position)
+      if (hit) {
+        const additive = event.shiftKey
+        onSelectionChange(hit.id, { additive })
+        const note = score.notes.find((item) => item.id === hit.id)
+        if (note && !note.isRest) {
+          dragRef.current = {
+            id: hit.id,
+            stave: hit.stave,
+            startDiatonic: diatonicIndex(note.pitchName, note.octave),
+            startY: position.y,
+            moved: false,
+          }
         }
+        return
       }
-      return
     }
 
     const measure = findMeasureAt(position)
     if (!measure) {
-      onSelectionChange(null)
+      if (!chordInsertion) onSelectionChange(null)
       return
     }
 
@@ -287,7 +295,7 @@ export default function ScoreEditor({
     )
 
     // 和音モード（またはAltキー）では、最も近い音に重ねる
-    if ((chordMode || event.altKey) && notesHere.length > 0) {
+    if (chordInsertion && notesHere.length > 0) {
       const nearest = notesHere.reduce((best, item) =>
         Math.abs(item.x - position.x) < Math.abs(best.x - position.x) ? item : best,
       )
