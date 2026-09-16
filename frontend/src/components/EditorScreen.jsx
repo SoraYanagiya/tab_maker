@@ -1,8 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { api } from '../api'
-import { DURATIONS, diatonicIndex, pitchFromDiatonic, pitchLabel } from '../music/pitch'
-import { absoluteOnsets, buildPlaybackEvents, createPlayer } from '../music/player'
+import {
+  DURATIONS,
+  PIANO_KEY_TO_SEMITONE,
+  PIANO_MAX_OCTAVE,
+  PIANO_MIN_OCTAVE,
+  diatonicIndex,
+  pianoMidi,
+  pitchFromDiatonic,
+  pitchFromMidi,
+  pitchLabel,
+} from '../music/pitch'
+import { absoluteOnsets, buildPlaybackEvents, createPlayer, previewPitch } from '../music/player'
 import {
   addMeasure,
   chordSiblingIds,
@@ -19,6 +29,7 @@ import {
   updateNotes,
 } from '../music/score'
 import { useHistory } from '../hooks/useHistory'
+import PianoKeyboard from './PianoKeyboard'
 import ScoreEditor from './ScoreEditor'
 import TabPreview from './TabPreview'
 import TabSvg from './TabSvg'
@@ -51,7 +62,10 @@ export default function EditorScreen({ projectId, onBack }) {
     isDotted: false,
     isRest: false,
     chordMode: false,
+    pianoMode: false,
   })
+  const [pianoOctave, setPianoOctave] = useState(4)
+  const [activeSemitone, setActiveSemitone] = useState(null)
   const [result, setResult] = useState(null)
   const [toggles, setToggles] = useState({ fingers: true, positions: true, shifts: false })
   const [saveStatus, setSaveStatus] = useState('saved')
@@ -65,6 +79,7 @@ export default function EditorScreen({ projectId, onBack }) {
   const [playingNoteId, setPlayingNoteId] = useState(null)
 
   const playerRef = useRef(null)
+  const pianoFlashRef = useRef(null)
   const loadedRef = useRef(false)
   const clipboardRef = useRef([])
   const fileInputRef = useRef(null)
@@ -149,7 +164,9 @@ export default function EditorScreen({ projectId, onBack }) {
           )
           const added = makeNote({
             ...request.pitch,
-            accidental: editorState.accidental,
+            // 鍵盤入力は黒鍵/白鍵で臨時記号を直接指定してくる。五線クリックはpitchに
+            // accidentalを含まないため、その場合だけツールバーの選択状態を使う
+            accidental: request.pitch.accidental ?? editorState.accidental,
             duration: target.duration,
             isDotted: target.isDotted,
             inChord: true,
@@ -163,7 +180,7 @@ export default function EditorScreen({ projectId, onBack }) {
 
       const note = makeNote({
         ...request.pitch,
-        accidental: editorState.accidental,
+        accidental: request.pitch.accidental ?? editorState.accidental,
         duration: editorState.duration,
         isDotted: editorState.isDotted,
         isRest: editorState.isRest,
@@ -172,6 +189,33 @@ export default function EditorScreen({ projectId, onBack }) {
       setSelectedIds([note.id])
     },
     [editorState, history],
+  )
+
+  // 鍵盤入力（画面上の仮想鍵盤 / PCキーボード共通）。和音モードなら選択中の音に
+  // 重ね、そうでなければ選択中の音の直後に新しい音を追加して選択を進める
+  // （step入力: 弾くたびにカーソルが進み、続けて次の音を入力できる）。
+  const handlePianoPlay = useCallback(
+    (pitch, semitone) => {
+      previewPitch(pianoMidi(pianoOctave, semitone))
+      setActiveSemitone(semitone)
+      window.clearTimeout(pianoFlashRef.current)
+      pianoFlashRef.current = window.setTimeout(() => setActiveSemitone(null), 150)
+
+      if (editorState.chordMode && selectedIds.length > 0) {
+        handleInsert({
+          type: 'chord',
+          targetId: selectedIds[selectedIds.length - 1],
+          pitch,
+        })
+        return
+      }
+
+      const anchorId = selectedIds[selectedIds.length - 1]
+      const anchorIndex = score.notes.findIndex((note) => note.id === anchorId)
+      const index = anchorIndex === -1 ? score.notes.length : anchorIndex + 1
+      handleInsert({ type: 'insert', index, pitch })
+    },
+    [editorState.chordMode, handleInsert, pianoOctave, score.notes, selectedIds],
   )
 
   const handleDragPitch = useCallback(
@@ -454,6 +498,26 @@ export default function EditorScreen({ projectId, onBack }) {
         moveSelection(event.key === 'ArrowLeft' ? -1 : 1)
         return
       }
+      if (editorState.pianoMode) {
+        if (event.key === 'z' || event.key === 'Z') {
+          event.preventDefault()
+          setPianoOctave((value) => Math.max(PIANO_MIN_OCTAVE, value - 1))
+          return
+        }
+        if (event.key === 'x' || event.key === 'X') {
+          event.preventDefault()
+          setPianoOctave((value) => Math.min(PIANO_MAX_OCTAVE, value + 1))
+          return
+        }
+        // A〜' が白鍵、W〜P が黒鍵（PCキーボードでの鍵盤入力）
+        const semitone = PIANO_KEY_TO_SEMITONE[event.key.toLowerCase()]
+        if (semitone !== undefined && !meta && !event.repeat) {
+          event.preventDefault()
+          const midi = pianoMidi(pianoOctave, semitone)
+          handlePianoPlay(pitchFromMidi(midi, currentMeasure?.keySignature ?? 'C'), semitone)
+          return
+        }
+      }
       const durationIndex = Number(event.key)
       if (durationIndex >= 1 && durationIndex <= DURATIONS.length) {
         handleEditorStateChange({ duration: DURATIONS[durationIndex - 1].id })
@@ -472,13 +536,16 @@ export default function EditorScreen({ projectId, onBack }) {
     return () => window.removeEventListener('keydown', handler)
   }, [
     copySelection,
+    currentMeasure,
     deleteSelection,
     editorState,
     generate,
     handleEditorStateChange,
+    handlePianoPlay,
     history,
     moveSelection,
     pasteClipboard,
+    pianoOctave,
     shiftPitch,
     togglePlayback,
   ])
@@ -597,6 +664,9 @@ export default function EditorScreen({ projectId, onBack }) {
             <span className="hint">
               五線をクリックで音符追加 / ドラッグで音高変更 / ↑↓で音程、1〜5で音価
               {editorState.chordMode ? ' / 和音モード: クリックで重ねる' : ' / Cキーで和音モード'}
+              {editorState.pianoMode
+                ? ' / 鍵盤入力: 弾くたびに続きへ挿入（Z/Xでオクターブ）'
+                : ''}
               {selectedNote && ` — 選択中: ${pitchLabel(selectedNote)}`}
             </span>
             <div className="playback">
@@ -661,6 +731,15 @@ export default function EditorScreen({ projectId, onBack }) {
               width={scoreWidth}
             />
           </div>
+          {editorState.pianoMode && (
+            <PianoKeyboard
+              octave={pianoOctave}
+              onOctaveChange={setPianoOctave}
+              onPlay={handlePianoPlay}
+              activeSemitone={activeSemitone}
+              keySignature={currentMeasure?.keySignature ?? 'C'}
+            />
+          )}
         </section>
 
         <div className="divider" ref={dividerRef}>

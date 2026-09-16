@@ -80,6 +80,47 @@ export function pitchFromDiatonic(index) {
   return { step: STEPS[((index % 7) + 7) % 7], octave: Math.floor(index / 7) }
 }
 
+/**
+ * 鍵盤入力の配列。オクターブ+完全4度（18半音）ぶんを白鍵11・黒鍵7で並べる。
+ * PCキーボードのタイピングピアノ（A S D F G H J K L ; ' が白鍵、
+ * W E T Y U O P が黒鍵）と、画面上の仮想鍵盤の両方で共有する。
+ */
+export const PIANO_WHITE_KEYS = [
+  { key: 'a', semitone: 0 },
+  { key: 's', semitone: 2 },
+  { key: 'd', semitone: 4 },
+  { key: 'f', semitone: 5 },
+  { key: 'g', semitone: 7 },
+  { key: 'h', semitone: 9 },
+  { key: 'j', semitone: 11 },
+  { key: 'k', semitone: 12 },
+  { key: 'l', semitone: 14 },
+  { key: ';', semitone: 16 },
+  { key: "'", semitone: 17 },
+]
+
+export const PIANO_BLACK_KEYS = [
+  { key: 'w', semitone: 1, afterWhiteIndex: 0 },
+  { key: 'e', semitone: 3, afterWhiteIndex: 1 },
+  { key: 't', semitone: 6, afterWhiteIndex: 3 },
+  { key: 'y', semitone: 8, afterWhiteIndex: 4 },
+  { key: 'u', semitone: 10, afterWhiteIndex: 5 },
+  { key: 'o', semitone: 13, afterWhiteIndex: 7 },
+  { key: 'p', semitone: 15, afterWhiteIndex: 8 },
+]
+
+export const PIANO_KEY_TO_SEMITONE = Object.fromEntries(
+  [...PIANO_WHITE_KEYS, ...PIANO_BLACK_KEYS].map(({ key, semitone }) => [key, semitone]),
+)
+
+export const PIANO_MIN_OCTAVE = 0
+export const PIANO_MAX_OCTAVE = 7
+
+/** 鍵盤オクターブと半音オフセットから、実際のMIDIノート番号を求める。 */
+export function pianoMidi(octave, semitone) {
+  return (octave + 1) * 12 + semitone
+}
+
 export function durationBeats(note) {
   const base = DURATIONS.find((d) => d.id === note.duration)?.beats ?? 1
   return note.isDotted ? base * 1.5 : base
