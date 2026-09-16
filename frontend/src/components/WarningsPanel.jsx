@@ -75,14 +75,14 @@ export default function WarningsPanel({ result, settings, onSettingsChange, onFo
 
         <label className="field">
           <span>
-            ポジション移動を避ける度合い: {settings.weights?.position_change ?? 6}
+            ポジション移動を避ける度合い: {settings.weights?.position_change ?? 15}
           </span>
           <input
             type="range"
             min="0"
-            max="15"
+            max="30"
             step="1"
-            value={settings.weights?.position_change ?? 6}
+            value={settings.weights?.position_change ?? 15}
             onChange={(event) => setWeight('position_change', Number(event.target.value))}
           />
         </label>
