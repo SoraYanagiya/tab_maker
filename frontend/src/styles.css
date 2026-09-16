@@ -420,6 +420,32 @@ input[type='text'] {
   margin-right: 2px;
 }
 
+.mode-switch {
+  display: inline-flex;
+  border: 1.5px solid var(--ink);
+  border-radius: 4px;
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+
+.mode-button {
+  border: none;
+  background: var(--panel);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 14px;
+}
+
+.mode-button + .mode-button {
+  border-left: 1.5px solid var(--ink);
+}
+
+.mode-button.is-active {
+  background: var(--ink);
+  color: #fff;
+}
+
 .score-scroll {
   flex: 1;
   overflow: auto;
@@ -507,6 +533,10 @@ input[type='text'] {
 .score-canvas {
   cursor: crosshair;
   user-select: none;
+}
+
+.score-canvas.is-operation-mode {
+  cursor: default;
 }
 
 .divider {
