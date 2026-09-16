@@ -25,3 +25,4 @@ GuitarTabMaker.spec
 .DS_Store
 .vscode/
 .idea/
+.claude/
