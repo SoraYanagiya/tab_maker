@@ -41,6 +41,7 @@ const DEFAULT_SETTINGS = {
   notationOctaveShift: -1,
   bpm: 90,
   weights: {},
+  chordDrops: {},
 }
 
 const AUTOSAVE_DELAY = 1500
@@ -332,24 +333,55 @@ export default function EditorScreen({ projectId, onBack }) {
   }, [history, score.notes, selectedIds])
 
   // --- TAB生成 --------------------------------------------------------------
-  const generate = useCallback(async () => {
-    setIsGenerating(true)
-    setError(null)
-    try {
-      const payload = toApiScore(score)
-      const response = await api.convert({
-        inputType: 'note_list',
-        content: payload,
-        settings: { ...settings, includeDetails: true },
+  const generate = useCallback(
+    async (overrideSettings) => {
+      const effectiveSettings = overrideSettings ?? settings
+      setIsGenerating(true)
+      setError(null)
+      try {
+        const payload = toApiScore(score)
+        const response = await api.convert({
+          inputType: 'note_list',
+          content: payload,
+          settings: { ...effectiveSettings, includeDetails: true },
+        })
+        setResult(response)
+        setStatus(`TAB譜を生成しました（音符 ${payload.notes.length} 個）`)
+      } catch (convertError) {
+        setError(`TAB生成に失敗しました: ${convertError.message}`)
+      } finally {
+        setIsGenerating(false)
+      }
+    },
+    [score, settings],
+  )
+
+  // 和音の一部を鳴らせなかった場合に、警告から別の押さえ方を選び直す（設計書 9.3）。
+  // settingsの更新は非同期なので、generate()には明示的に新しい設定を渡す
+  const handleSelectChordAlternative = useCallback(
+    (warningNoteIndex, droppedNoteIndices) => {
+      const nextSettings = {
+        ...settings,
+        chordDrops: { ...settings.chordDrops, [String(warningNoteIndex)]: droppedNoteIndices },
+      }
+      setSettings(nextSettings)
+      generate(nextSettings)
+    },
+    [settings, generate],
+  )
+
+  // 代替案の音を、実際にTAB化する前に試聴できるようにする
+  const handlePreviewAlternative = useCallback(
+    (fingerings) => {
+      const octaveShift = settings.notationOctaveShift ?? -1
+      fingerings.forEach((fingering, index) => {
+        const note = score.notes[fingering.noteIndex]
+        if (!note || note.midiNumber == null) return
+        window.setTimeout(() => previewPitch(note.midiNumber + 12 * octaveShift), index * 15)
       })
-      setResult(response)
-      setStatus(`TAB譜を生成しました（音符 ${payload.notes.length} 個）`)
-    } catch (convertError) {
-      setError(`TAB生成に失敗しました: ${convertError.message}`)
-    } finally {
-      setIsGenerating(false)
-    }
-  }, [score, settings])
+    },
+    [score.notes, settings.notationOctaveShift],
+  )
 
   // --- 再生 -----------------------------------------------------------------
   const stopPlayback = useCallback(() => {
@@ -644,7 +676,12 @@ export default function EditorScreen({ projectId, onBack }) {
             hidden
             onChange={importFile}
           />
-          <button type="button" className="primary-button" onClick={generate} disabled={isGenerating}>
+          <button
+            type="button"
+            className="primary-button"
+            onClick={() => generate()}
+            disabled={isGenerating}
+          >
             {isGenerating ? '生成中…' : 'TAB譜を生成 (⌘⏎)'}
           </button>
         </div>
@@ -797,6 +834,8 @@ export default function EditorScreen({ projectId, onBack }) {
                 const note = score.notes[noteIndex]
                 if (note) setSelectedIds([note.id])
               }}
+              onSelectAlternative={handleSelectChordAlternative}
+              onPreviewAlternative={handlePreviewAlternative}
             />
           </div>
         </section>
