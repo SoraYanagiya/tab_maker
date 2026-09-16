@@ -85,6 +85,21 @@ export default function Toolbar({
             <line x1="12" y1="18" x2="12" y2="4" stroke="currentColor" strokeWidth="1.6" />
           </svg>
         </button>
+        <button
+          type="button"
+          className={`icon-button${editorState.pianoMode ? ' is-active' : ''}`}
+          title="鍵盤入力モード — 画面上の鍵盤やPCキーボード(A〜' が白鍵、W〜Pが黒鍵)で音を入力する"
+          onClick={() => onEditorStateChange({ pianoMode: !editorState.pianoMode })}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24">
+            <rect x="2" y="4" width="20" height="16" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+            <line x1="8"  y1="4" x2="8"  y2="14" stroke="currentColor" strokeWidth="1.6" />
+            <line x1="13" y1="4" x2="13" y2="14" stroke="currentColor" strokeWidth="1.6" />
+            <line x1="18" y1="4" x2="18" y2="14" stroke="currentColor" strokeWidth="1.6" />
+            <rect x="5.5"  y="4" width="3" height="7" fill="currentColor" />
+            <rect x="15.5" y="4" width="3" height="7" fill="currentColor" />
+          </svg>
+        </button>
       </div>
 
       <div className="toolbar-group">

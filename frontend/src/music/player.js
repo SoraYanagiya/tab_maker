@@ -90,6 +90,28 @@ function pluckBuffer(context, midi, seconds) {
   return buffer
 }
 
+let previewContext = null
+
+/** 鍵盤入力のクリック/キー押下に対する、単発の試聴音。 */
+export function previewPitch(midi, seconds = 0.35) {
+  if (!previewContext) {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext
+    previewContext = new AudioContextClass()
+  }
+  if (previewContext.state === 'suspended') previewContext.resume()
+
+  const when = previewContext.currentTime + 0.005
+  const source = previewContext.createBufferSource()
+  source.buffer = pluckBuffer(previewContext, midi, Math.min(seconds + RELEASE, MAX_BUFFER_SECONDS))
+  const gain = previewContext.createGain()
+  gain.gain.setValueAtTime(0.0001, when)
+  gain.gain.exponentialRampToValueAtTime(PEAK_GAIN, when + 0.01)
+  gain.gain.exponentialRampToValueAtTime(0.0001, when + seconds + RELEASE)
+  source.connect(gain).connect(previewContext.destination)
+  source.start(when)
+  source.stop(when + seconds + RELEASE)
+}
+
 export function createPlayer() {
   let context = null
   let sources = []
