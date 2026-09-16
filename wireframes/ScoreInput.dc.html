@@ -1,0 +1,191 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    :root{
+      --ink:#2a2a28;
+      --muted:#8a8a86;
+      --line:#c9c9c4;
+      --bg:#f6f5f2;
+      --panel:#ffffff;
+      --accent: oklch(58% 0.09 250);
+      --accent-bg: oklch(58% 0.09 250 / 0.12);
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:system-ui,-apple-system,"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;color:var(--ink);background:var(--bg);}
+    a{color:var(--accent);} a:hover{color:var(--ink);}
+    .btn{display:inline-flex;align-items:center;gap:6px;border:1.5px solid var(--ink);border-radius:4px;background:var(--panel);color:var(--ink);font-size:13px;padding:8px 14px;white-space:nowrap;}
+    .btn.primary{background:var(--ink);color:#fff;border-color:var(--ink);font-size:15px;font-weight:600;padding:14px 28px;}
+    .icon-btn{width:36px;height:36px;border:1.5px solid var(--ink);border-radius:4px;background:var(--panel);display:flex;align-items:center;justify-content:center;}
+    .cap{font-size:10px;color:var(--muted);text-align:center;margin-top:4px;letter-spacing:.02em;}
+    .tag{font-size:11px;color:var(--muted);border:1px dashed var(--line);border-radius:3px;padding:2px 6px;}
+  </style>
+</helmet>
+<div style="width:1280px;height:800px;background:var(--bg);display:flex;flex-direction:column;">
+
+  <!-- Header -->
+  <div style="height:64px;flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;padding:0 24px;border-bottom:1.5px solid var(--ink);background:var(--panel);">
+    <div style="display:flex;align-items:baseline;gap:12px;">
+      <div style="font-size:20px;font-weight:700;">五線譜入力画面</div>
+      <div class="tag">画面 1 / ワイヤーフレーム</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:20px;">
+      <div style="display:flex;gap:8px;">
+        <div class="icon-btn" title="元に戻す">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 8L4 12l5 4"/><path d="M4 12h11a5 5 0 0 1 0 10h-1"/></svg>
+        </div>
+        <div class="icon-btn" title="やり直す">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M15 8l5 4-5 4"/><path d="M20 12H9a5 5 0 0 0 0 10h1"/></svg>
+        </div>
+      </div>
+      <div style="width:1px;height:24px;background:var(--line);"></div>
+      <div class="btn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 21h16"/></svg>
+        MusicXML / MIDI 読込
+      </div>
+    </div>
+  </div>
+
+  <!-- Toolbar: duration palette + measure controls -->
+  <div style="flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;padding:14px 24px;background:var(--panel);border-bottom:1px solid var(--line);">
+    <div style="display:flex;align-items:center;gap:18px;">
+      <div style="font-size:12px;color:var(--muted);">音価</div>
+      <div style="display:flex;gap:10px;">
+        <!-- whole note -->
+        <div>
+          <div style="width:44px;height:44px;border:1.5px solid var(--ink);border-radius:4px;display:flex;align-items:center;justify-content:center;">
+            <svg width="22" height="22" viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="7" ry="5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+          </div>
+          <div class="cap">全音符</div>
+        </div>
+        <!-- half note -->
+        <div>
+          <div style="width:44px;height:44px;border:1.5px solid var(--ink);border-radius:4px;display:flex;align-items:center;justify-content:center;">
+            <svg width="22" height="22" viewBox="0 0 24 24"><ellipse cx="9" cy="16" rx="5" ry="3.6" fill="none" stroke="currentColor" stroke-width="1.6" transform="rotate(-18 9 16)"/><line x1="13.5" y1="14.5" x2="13.5" y2="3" stroke="currentColor" stroke-width="1.6"/></svg>
+          </div>
+          <div class="cap">二分音符</div>
+        </div>
+        <!-- quarter note (selected) -->
+        <div>
+          <div style="width:44px;height:44px;border:1.5px solid var(--ink);border-radius:4px;display:flex;align-items:center;justify-content:center;background:var(--accent-bg);">
+            <svg width="22" height="22" viewBox="0 0 24 24"><ellipse cx="9" cy="16" rx="5" ry="3.6" fill="currentColor" transform="rotate(-18 9 16)"/><line x1="13.5" y1="14.5" x2="13.5" y2="3" stroke="currentColor" stroke-width="1.6"/></svg>
+          </div>
+          <div class="cap" style="color:var(--accent);font-weight:600;">四分音符</div>
+        </div>
+        <!-- eighth note -->
+        <div>
+          <div style="width:44px;height:44px;border:1.5px solid var(--ink);border-radius:4px;display:flex;align-items:center;justify-content:center;">
+            <svg width="22" height="22" viewBox="0 0 24 24"><ellipse cx="9" cy="16" rx="5" ry="3.6" fill="currentColor" transform="rotate(-18 9 16)"/><line x1="13.5" y1="14.5" x2="13.5" y2="3" stroke="currentColor" stroke-width="1.6"/><path d="M13.5 3c3 0 4.5 2 4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+          </div>
+          <div class="cap">八分音符</div>
+        </div>
+        <div style="width:1px;height:36px;background:var(--line);align-self:center;"></div>
+        <!-- rest -->
+        <div>
+          <div style="width:44px;height:44px;border:1.5px solid var(--ink);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:22px;">𝄽</div>
+          <div class="cap">休符</div>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <div class="btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+        小節を追加
+      </div>
+      <div class="btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/></svg>
+        小節を削除
+      </div>
+    </div>
+  </div>
+
+  <!-- Staff canvas -->
+  <div style="flex:1 1 auto;padding:32px 24px;display:flex;flex-direction:column;gap:10px;">
+    <div style="flex:1 1 auto;background:var(--panel);border:1.5px solid var(--ink);border-radius:6px;position:relative;padding:40px 32px;">
+      <div style="position:absolute;top:12px;left:32px;font-size:11px;color:var(--muted);">五線譜キャンバス &mdash; クリックで音符を配置</div>
+
+      <svg width="1152" height="220" viewBox="0 0 1152 220" style="display:block;margin-top:24px;">
+        <!-- 5 staff lines -->
+        <g stroke="var(--ink)" stroke-width="1.2">
+          <line x1="0" y1="40"  x2="1152" y2="40"/>
+          <line x1="0" y1="64"  x2="1152" y2="64"/>
+          <line x1="0" y1="88"  x2="1152" y2="88"/>
+          <line x1="0" y1="112" x2="1152" y2="112"/>
+          <line x1="0" y1="136" x2="1152" y2="136"/>
+        </g>
+
+        <!-- treble clef -->
+        <text x="14" y="128" font-size="86" font-family="Georgia, serif" fill="var(--ink)">𝄞</text>
+
+        <!-- barlines: 4 measures -->
+        <g stroke="var(--ink)" stroke-width="1.2">
+          <line x1="90"  y1="40" x2="90"  y2="136"/>
+          <line x1="360" y1="40" x2="360" y2="136"/>
+          <line x1="630" y1="40" x2="630" y2="136"/>
+          <line x1="900" y1="40" x2="900" y2="136"/>
+          <line x1="1148" y1="40" x2="1148" y2="136" stroke-width="2.4"/>
+        </g>
+
+        <!-- measure 1: ascending notes -->
+        <g>
+          <circle cx="140" cy="136" r="6" fill="var(--ink)"/><line x1="145.8" y1="133" x2="145.8" y2="96" stroke="var(--ink)" stroke-width="1.4"/>
+          <circle cx="195" cy="124" r="6" fill="var(--ink)"/><line x1="200.8" y1="121" x2="200.8" y2="84" stroke="var(--ink)" stroke-width="1.4"/>
+          <circle cx="250" cy="112" r="6" fill="var(--ink)"/><line x1="255.8" y1="109" x2="255.8" y2="72" stroke="var(--ink)" stroke-width="1.4"/>
+          <circle cx="305" cy="100" r="6" fill="var(--ink)"/><line x1="310.8" y1="97" x2="310.8" y2="60" stroke="var(--ink)" stroke-width="1.4"/>
+        </g>
+
+        <!-- measure 2: dashed ghost note = interaction affordance -->
+        <g>
+          <circle cx="400" cy="88" r="6" fill="var(--ink)"/><line x1="405.8" y1="85" x2="405.8" y2="48" stroke="var(--ink)" stroke-width="1.4"/>
+          <circle cx="470" cy="88" r="6.5" fill="none" stroke="var(--muted)" stroke-width="1.4" stroke-dasharray="3 2"/>
+          <text x="452" y="176" font-size="11" fill="var(--muted)">↑ クリックで音符配置</text>
+          <circle cx="560" cy="112" r="6" fill="var(--ink)"/><line x1="565.8" y1="109" x2="565.8" y2="72" stroke="var(--ink)" stroke-width="1.4"/>
+        </g>
+
+        <!-- measure 3: with a rest -->
+        <g>
+          <circle cx="660" cy="100" r="6" fill="var(--ink)"/><line x1="665.8" y1="97" x2="665.8" y2="60" stroke="var(--ink)" stroke-width="1.4"/>
+          <text x="720" y="118" font-size="30" fill="var(--ink)">𝄽</text>
+          <circle cx="810" cy="88" r="6" fill="var(--ink)"/><line x1="815.8" y1="85" x2="815.8" y2="48" stroke="var(--ink)" stroke-width="1.4"/>
+          <circle cx="865" cy="112" r="6" fill="var(--ink)"/><line x1="870.8" y1="109" x2="870.8" y2="72" stroke="var(--ink)" stroke-width="1.4"/>
+        </g>
+
+        <!-- measure 4: descending -->
+        <g>
+          <circle cx="940" cy="112" r="6" fill="var(--ink)"/><line x1="945.8" y1="109" x2="945.8" y2="72" stroke="var(--ink)" stroke-width="1.4"/>
+          <circle cx="1000" cy="124" r="6" fill="var(--ink)"/><line x1="1005.8" y1="121" x2="1005.8" y2="84" stroke="var(--ink)" stroke-width="1.4"/>
+          <circle cx="1060" cy="136" r="6" fill="var(--ink)"/><line x1="1065.8" y1="133" x2="1065.8" y2="96" stroke="var(--ink)" stroke-width="1.4"/>
+        </g>
+
+        <!-- measure numbers -->
+        <g font-size="11" fill="var(--muted)">
+          <text x="96"  y="30">1</text>
+          <text x="366" y="30">2</text>
+          <text x="636" y="30">3</text>
+          <text x="906" y="30">4</text>
+        </g>
+      </svg>
+    </div>
+  </div>
+
+  <!-- Footer: primary action -->
+  <div style="flex:0 0 auto;display:flex;justify-content:flex-end;align-items:center;padding:18px 24px;background:var(--panel);border-top:1px solid var(--line);">
+    <div style="font-size:11px;color:var(--muted);margin-right:auto;">音符 12 個 &middot; 4 小節</div>
+    <div class="btn primary">
+      TAB譜を生成する
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script>
+class Component extends DCLogic {}
+</script>
+</body>
+</html>

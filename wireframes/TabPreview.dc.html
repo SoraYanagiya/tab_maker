@@ -1,0 +1,200 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    :root{
+      --ink:#2a2a28;
+      --muted:#8a8a86;
+      --line:#c9c9c4;
+      --bg:#f6f5f2;
+      --panel:#ffffff;
+      --accent: oklch(58% 0.09 250);
+      --accent-bg: oklch(58% 0.09 250 / 0.14);
+      --warn: oklch(55% 0.14 55);
+      --warn-bg: oklch(55% 0.14 55 / 0.10);
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:system-ui,-apple-system,"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;color:var(--ink);background:var(--bg);}
+    a{color:var(--accent);} a:hover{color:var(--ink);}
+    .btn{display:inline-flex;align-items:center;gap:6px;border:1.5px solid var(--ink);border-radius:4px;background:var(--panel);color:var(--ink);font-size:13px;padding:8px 14px;white-space:nowrap;}
+    .tag{font-size:11px;color:var(--muted);border:1px dashed var(--line);border-radius:3px;padding:2px 6px;}
+    .chip{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:999px;padding:5px 10px 5px 12px;font-size:12px;background:var(--panel);}
+    .switch{width:30px;height:16px;border-radius:999px;position:relative;flex:0 0 auto;}
+    .switch.on{background:var(--ink);}
+    .switch.off{background:var(--line);}
+    .knob{position:absolute;top:2px;width:12px;height:12px;border-radius:999px;background:#fff;}
+  </style>
+</helmet>
+<div style="width:1280px;height:800px;background:var(--bg);display:flex;flex-direction:column;">
+
+  <!-- Header -->
+  <div style="height:64px;flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;padding:0 24px;border-bottom:1.5px solid var(--ink);background:var(--panel);">
+    <div style="display:flex;align-items:baseline;gap:12px;">
+      <div style="font-size:20px;font-weight:700;">TAB譜プレビュー画面</div>
+      <div class="tag">画面 2 / ワイヤーフレーム</div>
+    </div>
+    <div class="btn">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M15 6l-6 6 6 6"/></svg>
+      五線譜入力に戻る
+    </div>
+  </div>
+
+  <!-- Toggle row -->
+  <div style="flex:0 0 auto;display:flex;align-items:center;gap:12px;padding:14px 24px;background:var(--panel);border-bottom:1px solid var(--line);">
+    <div style="font-size:12px;color:var(--muted);margin-right:4px;">重ね表示</div>
+    <div class="chip"><span>指番号</span><div class="switch on"><div class="knob" style="right:2px;"></div></div></div>
+    <div class="chip"><span>ポジション</span><div class="switch on"><div class="knob" style="right:2px;"></div></div></div>
+    <div class="chip"><span>手の移動量</span><div class="switch off"><div class="knob" style="left:2px;"></div></div></div>
+  </div>
+
+  <!-- Main body: TAB + warnings -->
+  <div style="flex:1 1 auto;display:flex;gap:16px;padding:24px;">
+
+    <!-- Left: staff reference + TAB -->
+    <div style="flex:1 1 auto;display:flex;flex-direction:column;gap:14px;">
+
+      <!-- mini staff reference for sync illustration -->
+      <div style="background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px 24px;">
+        <div style="font-size:10px;color:var(--muted);margin-bottom:4px;">五線譜（参照）</div>
+        <svg width="900" height="70" viewBox="0 0 900 70">
+          <g stroke="var(--line)" stroke-width="1">
+            <line x1="0" y1="14" x2="900" y2="14"/>
+            <line x1="0" y1="26" x2="900" y2="26"/>
+            <line x1="0" y1="38" x2="900" y2="38"/>
+            <line x1="0" y1="50" x2="900" y2="50"/>
+            <line x1="0" y1="62" x2="900" y2="62"/>
+          </g>
+          <circle cx="120" cy="50" r="5" fill="var(--muted)"/>
+          <circle cx="220" cy="38" r="5" fill="var(--muted)"/>
+          <rect x="288" y="6" width="34" height="62" rx="4" fill="var(--accent-bg)"/>
+          <circle cx="305" cy="26" r="5.5" fill="var(--accent)"/>
+          <circle cx="420" cy="50" r="5" fill="var(--muted)"/>
+          <circle cx="520" cy="62" r="5" fill="var(--muted)"/>
+        </svg>
+        <div style="position:relative;">
+          <svg width="900" height="26" viewBox="0 0 900 26" style="display:block;">
+            <line x1="305" y1="0" x2="305" y2="26" stroke="var(--accent)" stroke-width="1.4" stroke-dasharray="3 2"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- TAB staff -->
+      <div style="flex:1 1 auto;background:var(--panel);border:1.5px solid var(--ink);border-radius:6px;padding:20px 24px 28px;position:relative;">
+        <svg width="1088" height="230" viewBox="0 0 1088 230">
+          <!-- string labels -->
+          <g font-family="Georgia, serif" font-size="15" fill="var(--ink)">
+            <text x="0"  y="28">e</text>
+            <text x="0"  y="53">B</text>
+            <text x="0"  y="78">G</text>
+            <text x="0"  y="103">D</text>
+            <text x="0"  y="128">A</text>
+            <text x="0"  y="153">E</text>
+          </g>
+          <!-- 6 tab lines -->
+          <g stroke="var(--ink)" stroke-width="1">
+            <line x1="26" y1="24"  x2="1080" y2="24"/>
+            <line x1="26" y1="49"  x2="1080" y2="49"/>
+            <line x1="26" y1="74"  x2="1080" y2="74"/>
+            <line x1="26" y1="99"  x2="1080" y2="99"/>
+            <line x1="26" y1="124" x2="1080" y2="124"/>
+            <line x1="26" y1="149" x2="1080" y2="149"/>
+          </g>
+          <!-- measure separators -->
+          <g stroke="var(--line)" stroke-width="1">
+            <line x1="290" y1="24" x2="290" y2="149"/>
+            <line x1="550" y1="24" x2="550" y2="149"/>
+            <line x1="810" y1="24" x2="810" y2="149"/>
+          </g>
+
+          <!-- highlighted column (synced with mini staff) -->
+          <rect x="335" y="10" width="46" height="150" fill="var(--accent-bg)" rx="4"/>
+
+          <!-- fret numbers, plain background -->
+          <g font-size="14" fill="var(--ink)" text-anchor="middle" font-family="system-ui, sans-serif">
+            <text x="80"  y="103">3</text>
+            <text x="150" y="78">5</text>
+            <text x="220" y="53">3</text>
+            <!-- highlighted note -->
+            <text x="358" y="53" fill="var(--accent)" font-weight="700">5</text>
+            <text x="420" y="78">7</text>
+            <text x="480" y="103">5</text>
+            <text x="600" y="128">0</text>
+            <text x="660" y="103">2</text>
+            <text x="720" y="78">3</text>
+            <text x="860" y="53">2</text>
+            <text x="930" y="78">0</text>
+            <text x="1000" y="103">3</text>
+          </g>
+
+          <!-- finger number badges (only when toggle ON) -->
+          <g font-size="10" fill="#fff">
+            <circle cx="80"  cy="103" r="0" /> <!-- placeholder spacing -->
+            <circle cx="150" cy="60" r="8" fill="var(--ink)"/><text x="150" y="63" text-anchor="middle">2</text>
+            <circle cx="220" cy="35" r="8" fill="var(--ink)"/><text x="220" y="38" text-anchor="middle">1</text>
+            <circle cx="358" cy="35" r="8" fill="var(--accent)"/><text x="358" y="38" text-anchor="middle">3</text>
+            <circle cx="420" cy="60" r="8" fill="var(--ink)"/><text x="420" y="63" text-anchor="middle">4</text>
+          </g>
+
+          <!-- position bracket -->
+          <g stroke="var(--muted)" stroke-width="1.2" fill="none">
+            <path d="M150 178 L150 186 L480 186 L480 178"/>
+          </g>
+          <text x="315" y="200" font-size="11" fill="var(--muted)" text-anchor="middle">5フレットポジション</text>
+
+          <!-- hand-shift marker between measures -->
+          <g stroke="var(--warn)" stroke-width="1.4">
+            <path d="M600 178 l-8 -8 M600 178 l8 -8" />
+          </g>
+          <text x="600" y="200" font-size="11" fill="var(--warn)" text-anchor="middle">大きな移動</text>
+        </svg>
+      </div>
+    </div>
+
+    <!-- Right: warnings panel -->
+    <div style="width:280px;flex:0 0 auto;display:flex;flex-direction:column;gap:12px;">
+      <div style="background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:16px;">
+        <div style="font-size:13px;font-weight:700;margin-bottom:10px;">警告</div>
+
+        <div style="display:flex;gap:8px;padding:10px;background:var(--warn-bg);border-radius:4px;margin-bottom:8px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--warn)" stroke-width="1.8" style="flex:0 0 auto;margin-top:1px;"><path d="M12 3l10 18H2z"/><line x1="12" y1="10" x2="12" y2="15"/><circle cx="12" cy="18" r="0.6" fill="var(--warn)"/></svg>
+          <div style="font-size:12px;line-height:1.5;">3小節目 4拍目: ポジション移動が大きくなっています（3→9フレット）</div>
+        </div>
+
+        <div style="display:flex;gap:8px;padding:10px;background:var(--warn-bg);border-radius:4px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--warn)" stroke-width="1.8" style="flex:0 0 auto;margin-top:1px;"><path d="M12 3l10 18H2z"/><line x1="12" y1="10" x2="12" y2="15"/><circle cx="12" cy="18" r="0.6" fill="var(--warn)"/></svg>
+          <div style="font-size:12px;line-height:1.5;">4小節目 2拍目: 同弦での連続運指により、指の重なりの可能性があります</div>
+        </div>
+      </div>
+
+      <div style="background:var(--panel);border:1px dashed var(--line);border-radius:6px;padding:16px;font-size:11px;color:var(--muted);line-height:1.6;">
+        凡例<br/>
+        <span style="display:inline-block;width:10px;height:10px;background:var(--accent-bg);border:1px solid var(--accent);vertical-align:middle;margin-right:6px;"></span>五線譜と同期中の音<br/>
+        <span style="display:inline-block;width:10px;height:10px;border-radius:999px;background:var(--ink);vertical-align:middle;margin-right:6px;"></span>指番号バッジ
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer: export -->
+  <div style="flex:0 0 auto;display:flex;justify-content:flex-end;gap:10px;padding:18px 24px;background:var(--panel);border-top:1px solid var(--line);">
+    <div class="btn">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"/></svg>
+      テキストで書き出し
+    </div>
+    <div class="btn">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="14" rx="1.5"/><circle cx="9" cy="10" r="1.6" fill="currentColor" stroke="none"/><path d="M3 15l5-4 4 3 4-5 5 6"/></svg>
+      画像で書き出し
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script>
+class Component extends DCLogic {}
+</script>
+</body>
+</html>
