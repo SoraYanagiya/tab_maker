@@ -1,12 +1,16 @@
 name: Build standalone app
 
 # push・手動実行のたびに macOS / Windows 向けアプリをビルドし、Artifact として保存する。
-# v* タグを push すると、GitHub Release を作成してビルド成果物を添付する。
+# main への push では「latest」ロールングリリースを常に最新化し、
+# v* タグを push すると、そのバージョン用の正式なGitHub Releaseも作成する。
 on:
   push:
     branches: [main]
     tags: ["v*"]
   workflow_dispatch: {}
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -17,12 +21,10 @@ jobs:
           - os: macos-latest
             artifact_name: GuitarTabMaker-macOS
             build_script: bash scripts/build_app.sh
-            build_output: dist/GuitarTabMaker.app
             zip_name: GuitarTabMaker-macOS.zip
           - os: windows-latest
             artifact_name: GuitarTabMaker-Windows
             build_script: pwsh scripts/build_app.ps1
-            build_output: dist/GuitarTabMaker
             zip_name: GuitarTabMaker-Windows.zip
 
     runs-on: ${{ matrix.os }}
@@ -59,8 +61,48 @@ jobs:
           path: dist/${{ matrix.zip_name }}
           retention-days: 30
 
-      - name: リリースに添付
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+  # main への push のたびに、常に最新版をダウンロードできる「latest」リリースを更新する。
+  # macOS/Windowsの2ジョブが同時にReleaseへ書き込むと競合するため、
+  # 両方のビルドが終わった後にこのジョブでまとめて1回だけ公開する。
+  publish-latest:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
         with:
-          files: dist/${{ matrix.zip_name }}
+          path: artifacts
+
+      - name: Releaseに添付するファイルをまとめる
+        run: |
+          mkdir -p release-assets
+          find artifacts -name '*.zip' -exec cp {} release-assets/ \;
+          ls -la release-assets
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "最新ビルド（mainブランチ）"
+          body: "mainブランチへのpushのたびに自動更新される最新ビルド。安定版は[Releases](../../releases)のバージョンタグ付きリリースを参照。"
+          prerelease: true
+          files: release-assets/*.zip
+
+  # v* タグを push したときは、そのバージョン用の正式なリリースも作成する。
+  publish-release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Releaseに添付するファイルをまとめる
+        run: |
+          mkdir -p release-assets
+          find artifacts -name '*.zip' -exec cp {} release-assets/ \;
+          ls -la release-assets
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/*.zip

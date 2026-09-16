@@ -52,10 +52,12 @@ cd frontend && npm run dev                           # http://localhost:5173
 
 ### ビルド済みアプリをダウンロードする（一番簡単）
 
-このリポジトリの [Releases](../../releases) と [Actions](../../actions/workflows/build-app.yml) に、push のたびに自動ビルドされた macOS / Windows 版が置かれている。ダウンロードして解凍するだけで、Python や Node をインストールせずに使える。
+[Releases](../../releases) に、常に最新のビルド（`latest` タグ、mainブランチへのpushのたびに自動更新）が置かれている。ダウンロードして解凍するだけで、Python や Node をインストールせずに使える。バージョンタグ（`v1.0.0` など）を切ったときは、そのバージョン専用のリリースも別途作成される。
 
 - macOS: `GuitarTabMaker-macOS.zip` を解凍し、`GuitarTabMaker.app` を `/Applications` にコピー
 - Windows: `GuitarTabMaker-Windows.zip` を解凍し、フォルダごと好きな場所に置いて `GuitarTabMaker.exe` を実行
+
+ビルドログだけを見たい場合は [Actions](../../actions/workflows/build-app.yml) を参照（各pushごとのArtifactも30日間保持される）。
 
 ### 自分でビルドする
 
