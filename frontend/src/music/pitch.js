@@ -55,6 +55,27 @@ export function diatonicIndex(step, octave) {
   return octave * 7 + STEPS.indexOf(step)
 }
 
+const SHARP_SPELLING = [
+  ['C', 'none'], ['C', 'sharp'], ['D', 'none'], ['D', 'sharp'], ['E', 'none'], ['F', 'none'],
+  ['F', 'sharp'], ['G', 'none'], ['G', 'sharp'], ['A', 'none'], ['A', 'sharp'], ['B', 'none'],
+]
+const FLAT_SPELLING = [
+  ['C', 'none'], ['D', 'flat'], ['D', 'none'], ['E', 'flat'], ['E', 'none'], ['F', 'none'],
+  ['G', 'flat'], ['G', 'none'], ['A', 'flat'], ['A', 'none'], ['B', 'flat'], ['B', 'none'],
+]
+
+/** MIDIノート番号を、調号に合った音名・オクターブ・臨時記号に読み替える。 */
+export function pitchFromMidi(midi, keySignature = 'C') {
+  const table = (KEY_FIFTHS[keySignature] ?? 0) < 0 ? FLAT_SPELLING : SHARP_SPELLING
+  const [step, accidental] = table[((midi % 12) + 12) % 12]
+  const octave = Math.floor(midi / 12) - 1
+  // 調号だけで同じ音になるなら、臨時記号は書かない
+  if (midiFromPitch(step, octave, 'none', keySignature) === midi) {
+    return { pitchName: step, octave, accidental: 'none' }
+  }
+  return { pitchName: step, octave, accidental }
+}
+
 export function pitchFromDiatonic(index) {
   return { step: STEPS[((index % 7) + 7) % 7], octave: Math.floor(index / 7) }
 }

@@ -91,6 +91,8 @@ class FingeringSchema(BaseModel):
     position: int | None = None
     handShift: int = 0
     isTiedContinuation: bool = False
+    isBarre: bool = False
+    chordSize: int = 1
 
 
 class WarningSchema(BaseModel):

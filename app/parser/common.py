@@ -110,34 +110,37 @@ def score_to_notes(score) -> ParsedScore:
                 )
                 continue
 
-            pitch = element.pitch
-            if isinstance(element, chord.Chord):
-                has_chord = True
-                pitch = max(element.pitches, key=lambda p: p.midi)
-
-            accidental = Accidental.NONE
-            if pitch.accidental is not None:
-                accidental = ACCIDENTAL_NAMES.get(pitch.accidental.name, Accidental.NONE)
-
             tie_to_next = element.tie is not None and element.tie.type in ("start", "continue")
-
-            result.notes.append(
-                Note(
-                    midiNumber=pitch.midi,
-                    pitchName=pitch.step,
-                    octave=pitch.octave,
-                    accidental=accidental,
-                    duration=duration,
-                    isDotted=is_dotted,
-                    tieToNext=tie_to_next,
-                    isRest=False,
-                    onsetBeat=onset,
-                    measureIndex=measure_index,
-                )
+            # 和音は、同じ拍位置に複数のNoteとして展開する（設計書 9.2）
+            pitches = (
+                sorted(element.pitches, key=lambda item: item.midi)
+                if isinstance(element, chord.Chord)
+                else [element.pitch]
             )
+            if len(pitches) > 1:
+                has_chord = True
+
+            for pitch in pitches:
+                accidental = Accidental.NONE
+                if pitch.accidental is not None:
+                    accidental = ACCIDENTAL_NAMES.get(pitch.accidental.name, Accidental.NONE)
+                result.notes.append(
+                    Note(
+                        midiNumber=pitch.midi,
+                        pitchName=pitch.step,
+                        octave=pitch.octave,
+                        accidental=accidental,
+                        duration=duration,
+                        isDotted=is_dotted,
+                        tieToNext=tie_to_next,
+                        isRest=False,
+                        onsetBeat=onset,
+                        measureIndex=measure_index,
+                    )
+                )
 
     if has_chord:
-        result.warnings.append("和音が含まれていたため、各和音の最高音のみを読み込みました（v1は単音旋律のみ対応）。")
+        result.warnings.append("和音を含む譜面として読み込みました。")
     if not result.measures:
         result.measures.append(MeasureInfo(measureIndex=0))
 

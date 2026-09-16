@@ -1,10 +1,10 @@
-"""運指候補のスコアリング（設計書 7.2 / 7.4 / 8.3）。"""
+"""運指候補のスコアリング（設計書 7.2 / 7.4 / 8.3 / 9.2）。"""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
-from ..domain.candidate import Candidate
+from ..domain.candidate import Candidate, EventPlacement
 from ..domain.state import State
 
 
@@ -34,6 +34,13 @@ class ScoringWeights:
     shift_time_reference_beats: float = 1.0
     infeasible_shift_penalty: float = 40.0
 
+    # 和音の押さえ方（設計書 9.2）
+    chord_span_penalty: float = 2.0
+    barre_penalty: float = 5.0
+    non_index_barre_penalty: float = 10.0
+    muted_string_penalty: float = 2.0
+    string_crossing_penalty: float = 6.0
+
     # 探索
     beam_width: int = 24
 
@@ -44,8 +51,17 @@ class ScoringWeights:
     def from_dict(cls, data: dict | None) -> "ScoringWeights":
         if not data:
             return cls()
-        known = {f for f in cls().to_dict()}
-        return cls(**{k: v for k, v in data.items() if k in known})
+        known = set(cls().to_dict())
+        return cls(**{key: value for key, value in data.items() if key in known})
+
+
+def allowed_shift(available_beats: float, weights: ScoringWeights) -> float:
+    """与えられた時間で手が移動できるフレット数の上限（設計書 8.3.1）。
+
+    短い音価の間では max_shift_short フレットが限界で、時間があるほど比例して伸びる。
+    """
+    ratio = max(1.0, available_beats / weights.shift_time_reference_beats)
+    return weights.max_shift_short * ratio
 
 
 def base_cost(candidate: Candidate, weights: ScoringWeights) -> float:
@@ -62,54 +78,92 @@ def base_cost(candidate: Candidate, weights: ScoringWeights) -> float:
     return cost
 
 
-def allowed_shift(available_beats: float, weights: ScoringWeights) -> float:
-    """与えられた時間で手が移動できるフレット数の上限（設計書 8.3.1）。
+def _muted_inner_strings(placement: EventPlacement) -> int:
+    """鳴らす弦に挟まれた、鳴らさない弦の数（ミュートが必要になる）。"""
+    strings = sorted(placement.strings)
+    if len(strings) < 2:
+        return 0
+    return (strings[-1] - strings[0] + 1) - len(strings)
 
-    短い音価の間では max_shift_short フレットが限界で、時間があるほど比例して伸びる。
+
+def _string_crossings(placement: EventPlacement) -> int:
+    """低い弦に高い音が乗っている（弦をまたぐ）組み合わせの数。
+
+    stringIndex 0 が最も高い弦なので、弦の番号が小さいほど音も高いのが自然な配置。
     """
-    ratio = max(1.0, available_beats / weights.shift_time_reference_beats)
-    return weights.max_shift_short * ratio
+    ordered = sorted(placement.candidates, key=lambda candidate: candidate.stringIndex)
+    crossings = 0
+    for i in range(len(ordered)):
+        for j in range(i + 1, len(ordered)):
+            if ordered[i].pitch < ordered[j].pitch:
+                crossings += 1
+    return crossings
 
 
-def transition_cost(
+def event_base_cost(placement: EventPlacement, weights: ScoringWeights) -> float:
+    """イベント（単音または和音）そのもののコスト（設計書 7.2 / 9.2）。"""
+    cost = sum(base_cost(candidate, weights) for candidate in placement.candidates)
+    if len(placement.candidates) == 1:
+        return cost
+
+    fretted = placement.fretted
+    if fretted:
+        span = max(c.fret for c in fretted) - min(c.fret for c in fretted)
+        cost += weights.chord_span_penalty * span
+    if placement.barreFret is not None:
+        cost += weights.barre_penalty
+        if placement.barreFret != placement.handPosition:
+            cost += weights.non_index_barre_penalty
+    cost += weights.muted_string_penalty * _muted_inner_strings(placement)
+    cost += weights.string_crossing_penalty * _string_crossings(placement)
+    return cost
+
+
+def event_transition_cost(
     state: State,
-    candidate: Candidate,
+    placement: EventPlacement,
     weights: ScoringWeights,
     available_beats: float = 1.0,
 ) -> float:
-    """直前の状態から候補へ遷移するコスト（設計書 8.3）。
+    """直前の状態からイベントへ遷移するコスト（設計書 8.3）。
 
-    前後どちらかが開放弦の場合、フレット移動・ポジション移動・手の移動は発生しない
-    ものとして扱う（設計書 7.4）。
+    前後どちらかが開放弦のみの場合、フレット移動・ポジション移動・手の移動は
+    発生しないものとして扱う（設計書 7.4）。
     """
-    if state.previousString is None:
+    if not state.previousPlacements:
         return 0.0
 
-    open_involved = candidate.is_open or state.previousFret == 0
+    previous_fretted = [fret for fret in state.previous_frets if fret > 0]
+    open_involved = placement.is_all_open or not previous_fretted
 
-    fret_distance = 0 if open_involved else abs((state.previousFret or 0) - candidate.fret)
+    if open_involved:
+        fret_distance = 0
+    else:
+        fret_distance = abs(min(previous_fretted) - placement.anchor_fret)
 
     too_fast_penalty = 0.0
-    if open_involved or state.handPosition is None or candidate.handPosition is None:
+    if open_involved or state.handPosition is None or placement.handPosition is None:
         position_change = 0
         large_hand_move = 0
     else:
-        shift = abs(state.handPosition - candidate.handPosition)
+        shift = abs(state.handPosition - placement.handPosition)
         position_change = shift
         large_hand_move = 1 if shift >= weights.large_shift_threshold else 0
         limit = allowed_shift(available_beats, weights)
         if shift > limit:
             too_fast_penalty = weights.infeasible_shift_penalty * (shift - limit)
 
-    string_change = 1 if state.previousString != candidate.stringIndex else 0
+    string_change = 1 if state.previous_strings != placement.strings else 0
 
     finger_conflict = 0.0
-    if (
-        not open_involved
-        and state.previousFinger == candidate.finger
-        and state.previousFret != candidate.fret
-    ):
-        finger_conflict = weights.same_finger_penalty
+    if not open_involved:
+        previous_fingers = {
+            finger: fret for _, fret, finger in state.previousPlacements if finger > 0
+        }
+        for candidate in placement.fretted:
+            previous_fret = previous_fingers.get(candidate.finger)
+            if previous_fret is not None and previous_fret != candidate.fret:
+                finger_conflict += weights.same_finger_penalty
 
     return (
         weights.fret_distance * fret_distance
@@ -119,3 +173,14 @@ def transition_cost(
         + finger_conflict
         + too_fast_penalty
     )
+
+
+def transition_cost(
+    state: State,
+    candidate: Candidate,
+    weights: ScoringWeights,
+    available_beats: float = 1.0,
+) -> float:
+    """単音の遷移コスト（設計書 8.3）。イベント版に委譲する。"""
+    placement = EventPlacement(candidates=(candidate,), handPosition=candidate.handPosition)
+    return event_transition_cost(state, placement, weights, available_beats)

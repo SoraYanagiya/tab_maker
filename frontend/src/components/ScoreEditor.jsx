@@ -9,6 +9,7 @@ import {
   StaveTie,
   Voice,
 } from 'vexflow'
+import { chordGroups } from '../music/score'
 import {
   accidentalGlyph,
   beatsPerMeasure,
@@ -40,6 +41,7 @@ export default function ScoreEditor({
   onDragPitch,
   highlightedNoteId,
   onHoverNote,
+  chordMode,
   width,
 }) {
   const containerRef = useRef(null)
@@ -60,8 +62,9 @@ export default function ScoreEditor({
     const systems = []
     let currentSystem = []
     let usedWidth = 0
+    const groups = chordGroups(score)
     score.measures.forEach((measure, measureIndex) => {
-      const noteCount = score.notes.filter((note) => note.measureIndex === measureIndex).length
+      const noteCount = groups.filter((group) => group[0].measureIndex === measureIndex).length
       const isFirstInSystem = currentSystem.length === 0
       const measureWidth =
         Math.max(MIN_MEASURE_WIDTH, 40 + noteCount * NOTE_WIDTH) +
@@ -119,27 +122,38 @@ export default function ScoreEditor({
           system: systemIndex,
         })
 
-        const measureNotes = score.notes.filter((note) => note.measureIndex === entry.measureIndex)
-        if (measureNotes.length > 0) {
-          const staveNotes = measureNotes.map((note) => {
+        const measureGroups = groups.filter(
+          (group) => group[0].measureIndex === entry.measureIndex,
+        )
+        if (measureGroups.length > 0) {
+          const staveNotes = measureGroups.map((group) => {
+            // 和音は音高順に並べたキーを持つ1つの音符として描く
+            const sorted = [...group].sort(
+              (a, b) => (a.midiNumber ?? 0) - (b.midiNumber ?? 0),
+            )
+            const head = sorted[0]
             const staveNote = new StaveNote({
-              keys: [vexKey(note)],
-              duration: vexDuration(note),
+              keys: sorted.map((note) => vexKey(note)),
+              duration: vexDuration(head),
               clef: 'treble',
               auto_stem: true,
             })
-            const glyph = note.isRest ? null : accidentalGlyph(note.accidental)
-            if (glyph) staveNote.addModifier(new Accidental(glyph), 0)
-            if (note.isDotted) Dot.buildAndAttach([staveNote], { all: true })
+            sorted.forEach((note, keyIndex) => {
+              const glyph = note.isRest ? null : accidentalGlyph(note.accidental)
+              if (glyph) staveNote.addModifier(new Accidental(glyph), keyIndex)
+            })
+            if (head.isDotted) Dot.buildAndAttach([staveNote], { all: true })
 
-            if (selectedIds.includes(note.id)) {
-              staveNote.setStyle({ fillStyle: ACCENT, strokeStyle: ACCENT })
-            } else if (highlightedNoteId === note.id) {
-              staveNote.setStyle({ fillStyle: HIGHLIGHT, strokeStyle: HIGHLIGHT })
-            } else {
-              staveNote.setStyle({ fillStyle: INK, strokeStyle: INK })
-            }
-            drawnNotes.set(note.id, staveNote)
+            staveNote.setStyle({ fillStyle: INK, strokeStyle: INK })
+            sorted.forEach((note, keyIndex) => {
+              if (selectedIds.includes(note.id)) {
+                staveNote.setKeyStyle(keyIndex, { fillStyle: ACCENT, strokeStyle: ACCENT })
+              } else if (highlightedNoteId === note.id) {
+                staveNote.setKeyStyle(keyIndex, { fillStyle: HIGHLIGHT, strokeStyle: HIGHLIGHT })
+              }
+              drawnNotes.set(note.id, staveNote)
+            })
+            staveNote.__notes = sorted
             return staveNote
           })
 
@@ -154,18 +168,18 @@ export default function ScoreEditor({
             .format([voice], entry.width - (indexInSystem === 0 ? FIRST_MEASURE_EXTRA + 20 : 30))
           voice.draw(context, stave)
 
-          measureNotes.forEach((note, index) => {
-            const staveNote = staveNotes[index]
-            const box = staveNote.getBoundingBox()
-            noteLayout.push({
-              id: note.id,
-              measureIndex: entry.measureIndex,
-              x: staveNote.getAbsoluteX(),
-              y: box ? box.getY() : y,
-              height: box ? box.getH() : 60,
-              staveY: y,
-              stave,
-              system: systemIndex,
+          staveNotes.forEach((staveNote) => {
+            const ys = staveNote.getYs()
+            staveNote.__notes.forEach((note, keyIndex) => {
+              noteLayout.push({
+                id: note.id,
+                measureIndex: entry.measureIndex,
+                x: staveNote.getAbsoluteX(),
+                y: ys[keyIndex] ?? y,
+                staveY: y,
+                stave,
+                system: systemIndex,
+              })
             })
           })
         }
@@ -175,9 +189,10 @@ export default function ScoreEditor({
     })
 
     // タイを描く（同じシステム内の隣接音のみ）
-    score.notes.forEach((note, index) => {
+    groups.forEach((group, groupIndex) => {
+      const note = group[0]
       if (!note.tieToNext) return
-      const next = score.notes[index + 1]
+      const next = groups[groupIndex + 1]?.[0]
       if (!next) return
       const from = drawnNotes.get(note.id)
       const to = drawnNotes.get(next.id)
@@ -205,13 +220,19 @@ export default function ScoreEditor({
     return { x: event.clientX - rect.left, y: event.clientY - rect.top }
   }
 
-  const findNoteAt = (position) =>
-    layoutRef.current.notes.find(
+  const findNoteAt = (position) => {
+    const nearby = layoutRef.current.notes.filter(
       (item) =>
         Math.abs(item.x + 6 - position.x) < 16 &&
         position.y > item.staveY - 34 &&
         position.y < item.staveY + 90,
     )
+    if (nearby.length === 0) return undefined
+    // 和音は同じ位置に複数の符頭が重なるため、縦位置が最も近いものを選ぶ
+    return nearby.reduce((best, item) =>
+      Math.abs(item.y - position.y) < Math.abs(best.y - position.y) ? item : best,
+    )
+  }
 
   const findMeasureAt = (position) => {
     const inBand = layoutRef.current.measures.filter(
@@ -264,6 +285,19 @@ export default function ScoreEditor({
     const notesHere = layoutRef.current.notes.filter(
       (item) => item.measureIndex === measure.measureIndex,
     )
+
+    // 和音モード（またはAltキー）では、最も近い音に重ねる
+    if ((chordMode || event.altKey) && notesHere.length > 0) {
+      const nearest = notesHere.reduce((best, item) =>
+        Math.abs(item.x - position.x) < Math.abs(best.x - position.x) ? item : best,
+      )
+      onScoreChange({
+        type: 'chord',
+        targetId: nearest.id,
+        pitch: { pitchName: pitch.step, octave: pitch.octave },
+      })
+      return
+    }
     const insertOffset = notesHere.filter((item) => item.x < position.x).length
     const measureStart = score.notes.findIndex(
       (note) => note.measureIndex === measure.measureIndex,

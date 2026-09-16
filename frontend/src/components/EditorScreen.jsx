@@ -5,6 +5,7 @@ import { DURATIONS, diatonicIndex, pitchFromDiatonic, pitchLabel } from '../musi
 import { absoluteOnsets, buildPlaybackEvents, createPlayer } from '../music/player'
 import {
   addMeasure,
+  chordSiblingIds,
   deleteNotes,
   emptyScore,
   fromApiScore,
@@ -49,6 +50,7 @@ export default function EditorScreen({ projectId, onBack }) {
     accidental: 'none',
     isDotted: false,
     isRest: false,
+    chordMode: false,
   })
   const [result, setResult] = useState(null)
   const [toggles, setToggles] = useState({ fingers: true, positions: true, shifts: false })
@@ -135,15 +137,38 @@ export default function EditorScreen({ projectId, onBack }) {
 
   // --- 編集操作 -------------------------------------------------------------
   const handleInsert = useCallback(
-    ({ index, pitch }) => {
+    (request) => {
+      if (request.type === 'chord') {
+        // 既存の音に重ねて和音にする
+        history.set((current) => {
+          const siblings = chordSiblingIds(current, request.targetId)
+          const target = current.notes.find((note) => note.id === request.targetId)
+          if (!target || target.isRest) return current
+          const lastIndex = current.notes.findIndex(
+            (note) => note.id === siblings[siblings.length - 1],
+          )
+          const added = makeNote({
+            ...request.pitch,
+            accidental: editorState.accidental,
+            duration: target.duration,
+            isDotted: target.isDotted,
+            inChord: true,
+          })
+          const next = insertNotes(current, lastIndex + 1, [added])
+          setSelectedIds([added.id])
+          return next
+        })
+        return
+      }
+
       const note = makeNote({
-        ...pitch,
+        ...request.pitch,
         accidental: editorState.accidental,
         duration: editorState.duration,
         isDotted: editorState.isDotted,
         isRest: editorState.isRest,
       })
-      history.set((current) => insertNotes(current, index, [note]))
+      history.set((current) => insertNotes(current, request.index, [note]))
       setSelectedIds([note.id])
     },
     [editorState, history],
@@ -200,6 +225,10 @@ export default function EditorScreen({ projectId, onBack }) {
       }
       if ('isRest' in change) {
         applyToSelectionOrDefault({ isRest: change.isRest }, change)
+        return
+      }
+      if ('chordMode' in change) {
+        setEditorState((current) => ({ ...current, chordMode: change.chordMode }))
         return
       }
       setEditorState((current) => ({ ...current, ...change }))
@@ -431,6 +460,7 @@ export default function EditorScreen({ projectId, onBack }) {
         return
       }
       const key = event.key.toLowerCase()
+      if (key === 'c') handleEditorStateChange({ chordMode: !editorState.chordMode })
       if (key === 'r') handleEditorStateChange({ isRest: !editorState.isRest })
       if (key === 's') handleEditorStateChange({ accidental: 'sharp' })
       if (key === 'f') handleEditorStateChange({ accidental: 'flat' })
@@ -566,6 +596,7 @@ export default function EditorScreen({ projectId, onBack }) {
             <h2>五線譜入力</h2>
             <span className="hint">
               五線をクリックで音符追加 / ドラッグで音高変更 / ↑↓で音程、1〜5で音価
+              {editorState.chordMode ? ' / 和音モード: クリックで重ねる' : ' / Cキーで和音モード'}
               {selectedNote && ` — 選択中: ${pitchLabel(selectedNote)}`}
             </span>
             <div className="playback">
@@ -626,6 +657,7 @@ export default function EditorScreen({ projectId, onBack }) {
               onDragPitch={handleDragPitch}
               highlightedNoteId={playingNoteId ?? hoveredNoteId}
               onHoverNote={setHoveredNoteId}
+              chordMode={editorState.chordMode}
               width={scoreWidth}
             />
           </div>

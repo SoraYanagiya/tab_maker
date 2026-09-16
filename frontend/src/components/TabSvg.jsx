@@ -2,6 +2,8 @@ import { useMemo } from 'react'
 
 const LABEL_WIDTH = 26
 const COLUMN_WIDTH = 34
+// 和音では指番号を数字の左に置くため、列幅を広げて隣の列と重ならないようにする
+const CHORD_COLUMN_WIDTH = 48
 const MEASURE_PADDING = 18
 const STRING_SPACING = 18
 const BADGE_AREA = 34
@@ -31,13 +33,28 @@ export default function TabSvg({
 }) {
   const stringLabels = ['e', 'B', 'G', 'D', 'A', 'E']
 
+  const hasChord = result?.fingerings?.some((fingering) => fingering.chordSize > 1) ?? false
+  const columnWidth = hasChord && toggles.fingers ? CHORD_COLUMN_WIDTH : COLUMN_WIDTH
+
   const layout = useMemo(() => {
     if (!result) return null
     const available = Math.max(480, (width || 900) - 24)
+    // 同じ拍位置の音（和音）はひとつの列にまとめる
     const byMeasure = new Map()
     result.fingerings.forEach((fingering) => {
       if (!byMeasure.has(fingering.measureIndex)) byMeasure.set(fingering.measureIndex, [])
-      byMeasure.get(fingering.measureIndex).push(fingering)
+      const columns = byMeasure.get(fingering.measureIndex)
+      const last = columns[columns.length - 1]
+      if (
+        last &&
+        !fingering.isRest &&
+        !last[0].isRest &&
+        Math.abs(last[0].onsetBeat - fingering.onsetBeat) < 1e-9
+      ) {
+        last.push(fingering)
+      } else {
+        columns.push([fingering])
+      }
     })
 
     const rows = []
@@ -47,7 +64,7 @@ export default function TabSvg({
       .sort((a, b) => a - b)
       .forEach((measureIndex) => {
         const items = byMeasure.get(measureIndex)
-        const measureWidth = items.length * COLUMN_WIDTH + MEASURE_PADDING
+        const measureWidth = items.length * columnWidth + MEASURE_PADDING
         if (current.length > 0 && used + measureWidth > available) {
           rows.push(current)
           current = []
@@ -70,10 +87,11 @@ export default function TabSvg({
       let x = LABEL_WIDTH
       const measures = row.map((measure) => {
         const startX = x
-        const columns = measure.items.map((fingering, index) => ({
-          fingering,
-          x: startX + MEASURE_PADDING / 2 + index * COLUMN_WIDTH + COLUMN_WIDTH / 2,
-          warnings: warningsByNote.get(fingering.noteIndex) ?? [],
+        const columns = measure.items.map((group, index) => ({
+          group,
+          fingering: group[0],
+          x: startX + MEASURE_PADDING / 2 + index * columnWidth + columnWidth / 2,
+          warnings: group.flatMap((item) => warningsByNote.get(item.noteIndex) ?? []),
         }))
         x += measure.width
         return { ...measure, startX, endX: x, columns }
@@ -87,7 +105,7 @@ export default function TabSvg({
     })
 
     return { rows: placed, rowHeight, totalWidth: available }
-  }, [result, width])
+  }, [result, width, columnWidth])
 
   if (!result || !layout) return null
 
@@ -97,7 +115,7 @@ export default function TabSvg({
   const positionSpans = (columns) => {
     const spans = []
     columns.forEach(({ fingering, x }) => {
-      if (fingering.isRest || fingering.fret === 0 || fingering.position == null) return
+      if (fingering.isRest || fingering.position == null) return
       const last = spans[spans.length - 1]
       if (last && last.position === fingering.position) {
         last.endX = x
@@ -181,15 +199,11 @@ export default function TabSvg({
               ))}
 
             {row.measures.flatMap((measure) =>
-              measure.columns.map(({ fingering, x, warnings }) => {
-                const note = score.notes[fingering.noteIndex]
-                const noteId = note?.id
-                const isSelected = noteId && selectedIds.includes(noteId)
-                const isHighlighted = noteId && highlightedNoteId === noteId
-                const stringY =
-                  fingering.stringIndex != null
-                    ? top + fingering.stringIndex * STRING_SPACING
-                    : null
+              measure.columns.map(({ group, fingering, x, warnings }) => {
+                const noteIds = group.map((item) => score.notes[item.noteIndex]?.id)
+                const noteId = noteIds[0]
+                const isSelected = noteIds.some((id) => id && selectedIds.includes(id))
+                const isHighlighted = noteIds.some((id) => id && highlightedNoteId === id)
 
                 return (
                   <g
@@ -200,9 +214,9 @@ export default function TabSvg({
                     onClick={() => noteId && onSelectNote(noteId)}
                   >
                     <rect
-                      x={x - COLUMN_WIDTH / 2}
+                      x={x - columnWidth / 2}
                       y={row.y + 6}
-                      width={COLUMN_WIDTH}
+                      width={columnWidth}
                       height={BADGE_AREA + STRING_SPACING * 5 + 8}
                       fill={
                         isSelected
@@ -214,42 +228,54 @@ export default function TabSvg({
                       rx="4"
                     />
 
-                    {stringY != null && (
-                      <>
-                        <rect
-                          x={x - 9}
-                          y={stringY - 8}
-                          width="18"
-                          height="16"
-                          fill="#ffffff"
-                        />
-                        <text
-                          x={x}
-                          y={stringY + 4}
-                          fontSize="13"
-                          textAnchor="middle"
-                          fontWeight={isSelected || isHighlighted ? '700' : '400'}
-                          fill={isSelected ? ACCENT : isHighlighted ? HIGHLIGHT : INK}
-                        >
-                          {fingering.isTiedContinuation ? `(${fingering.fret})` : fingering.fret}
-                        </text>
-                      </>
-                    )}
+                    {group
+                      .filter((item) => item.stringIndex != null)
+                      .map((item) => {
+                        const stringY = top + item.stringIndex * STRING_SPACING
+                        const itemId = score.notes[item.noteIndex]?.id
+                        const itemSelected = itemId && selectedIds.includes(itemId)
+                        return (
+                          <g key={`fret-${item.noteIndex}`}>
+                            <rect x={x - 9} y={stringY - 8} width="18" height="16" fill="#ffffff" />
+                            <text
+                              x={x}
+                              y={stringY + 4}
+                              fontSize="13"
+                              textAnchor="middle"
+                              fontWeight={isSelected || isHighlighted ? '700' : '400'}
+                              fill={itemSelected ? ACCENT : isHighlighted ? HIGHLIGHT : INK}
+                            >
+                              {item.isTiedContinuation ? `(${item.fret})` : item.fret}
+                            </text>
+                          </g>
+                        )
+                      })}
 
-                    {toggles.fingers && fingering.finger > 0 && stringY != null && (
-                      <>
-                        <circle cx={x} cy={row.y + 18} r="7" fill={isSelected ? ACCENT : INK} />
-                        <text
-                          x={x}
-                          y={row.y + 21}
-                          fontSize="9"
-                          fill="#ffffff"
-                          textAnchor="middle"
-                        >
-                          {fingering.finger}
-                        </text>
-                      </>
-                    )}
+                    {toggles.fingers &&
+                      group
+                        .filter((item) => item.finger > 0 && item.stringIndex != null)
+                        .map((item) => {
+                          const stringY = top + item.stringIndex * STRING_SPACING
+                          return (
+                            <g key={`finger-${item.noteIndex}`}>
+                              <circle
+                                cx={x - 13}
+                                cy={stringY}
+                                r="6"
+                                fill={item.isBarre ? ACCENT : INK}
+                              />
+                              <text
+                                x={x - 13}
+                                y={stringY + 3}
+                                fontSize="8"
+                                fill="#ffffff"
+                                textAnchor="middle"
+                              >
+                                {item.finger}
+                              </text>
+                            </g>
+                          )
+                        })}
 
                     {toggles.shifts && fingering.handShift !== 0 && (
                       <text

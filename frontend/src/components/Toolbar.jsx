@@ -72,6 +72,19 @@ export default function Toolbar({
         >
           <span className="glyph">𝄽</span>
         </button>
+        <button
+          type="button"
+          className={`icon-button${editorState.chordMode ? ' is-active' : ''}`}
+          title="和音モード (C) — クリックした位置の音に重ねる。Altキーを押しながらでも同じ"
+          onClick={() => onEditorStateChange({ chordMode: !editorState.chordMode })}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24">
+            <ellipse cx="8" cy="7" rx="4" ry="2.8" fill="currentColor" transform="rotate(-18 8 7)" />
+            <ellipse cx="8" cy="13" rx="4" ry="2.8" fill="currentColor" transform="rotate(-18 8 13)" />
+            <ellipse cx="8" cy="19" rx="4" ry="2.8" fill="currentColor" transform="rotate(-18 8 19)" />
+            <line x1="12" y1="18" x2="12" y2="4" stroke="currentColor" strokeWidth="1.6" />
+          </svg>
+        </button>
       </div>
 
       <div className="toolbar-group">

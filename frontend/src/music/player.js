@@ -3,6 +3,8 @@ import { beatsPerMeasure, durationBeats } from './pitch'
 const DAMPING = 0.995
 const PEAK_GAIN = 0.3
 const RELEASE = 0.5
+// 減衰しきった後まで合成しても無駄なので、1音あたりの長さはここで頭打ちにする
+const MAX_BUFFER_SECONDS = 2.5
 
 /** 各音符の、曲頭からの通算拍位置。 */
 export function absoluteOnsets(score) {
@@ -40,14 +42,26 @@ export function buildPlaybackEvents(score, octaveShift = -1) {
     }
     events.push({
       noteIds: score.notes.slice(index, last + 1).map((item) => item.id),
-      midi: note.midiNumber + 12 * octaveShift,
+      midis: [note.midiNumber + 12 * octaveShift],
       startBeat: onsets[index],
       beats,
     })
     index = last + 1
   }
 
-  return events
+  // 同じ拍位置の音は和音としてまとめて鳴らす
+  const merged = []
+  events.forEach((event) => {
+    const last = merged[merged.length - 1]
+    if (last && Math.abs(last.startBeat - event.startBeat) < 1e-9) {
+      last.midis.push(...event.midis)
+      last.noteIds.push(...event.noteIds)
+      last.beats = Math.max(last.beats, event.beats)
+    } else {
+      merged.push(event)
+    }
+  })
+  return merged
 }
 
 /**
@@ -119,18 +133,23 @@ export function createPlayer() {
     const offset = target[0].startBeat
 
     target.forEach((event) => {
-      const when = startTime + (event.startBeat - offset) * secondsPerBeat
       const duration = Math.max(0.18, event.beats * secondsPerBeat)
-      const source = audio.createBufferSource()
-      source.buffer = pluckBuffer(audio, event.midi, Math.min(duration + RELEASE, 6))
-      const gain = audio.createGain()
-      gain.gain.setValueAtTime(0.0001, when)
-      gain.gain.exponentialRampToValueAtTime(PEAK_GAIN, when + 0.01)
-      gain.gain.exponentialRampToValueAtTime(0.0001, when + duration + RELEASE)
-      source.connect(gain).connect(audio.destination)
-      source.start(when)
-      source.stop(when + duration + RELEASE)
-      sources.push(source)
+      // 和音は低い弦から順にわずかにずらして鳴らす（ストロークの再現）
+      const spread = event.midis.length > 1 ? 0.012 : 0
+      const ordered = [...event.midis].sort((a, b) => a - b)
+      ordered.forEach((midi, index) => {
+        const when = startTime + (event.startBeat - offset) * secondsPerBeat + index * spread
+        const source = audio.createBufferSource()
+        source.buffer = pluckBuffer(audio, midi, Math.min(duration + RELEASE, MAX_BUFFER_SECONDS))
+        const gain = audio.createGain()
+        gain.gain.setValueAtTime(0.0001, when)
+        gain.gain.exponentialRampToValueAtTime(PEAK_GAIN / Math.sqrt(ordered.length), when + 0.01)
+        gain.gain.exponentialRampToValueAtTime(0.0001, when + duration + RELEASE)
+        source.connect(gain).connect(audio.destination)
+        source.start(when)
+        source.stop(when + duration + RELEASE)
+        sources.push(source)
+      })
     })
 
     const totalBeats = Math.max(...target.map((event) => event.startBeat - offset + event.beats))
