@@ -63,6 +63,9 @@ export default function EditorScreen({ projectId, onBack }) {
     isRest: false,
     chordMode: false,
     pianoMode: false,
+    // 音符入力モード: ONなら五線クリックで音符を追加する（既定）。
+    // OFF（操作モード）では、既存の音符の選択・ドラッグ以外の編集を行わない
+    noteInputMode: true,
   })
   const [pianoOctave, setPianoOctave] = useState(4)
   const [activeSemitone, setActiveSemitone] = useState(null)
@@ -482,6 +485,11 @@ export default function EditorScreen({ projectId, onBack }) {
         togglePlayback()
         return
       }
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        handleEditorStateChange({ noteInputMode: false })
+        return
+      }
       if (event.key === 'Delete' || event.key === 'Backspace') {
         event.preventDefault()
         deleteSelection()
@@ -662,8 +670,12 @@ export default function EditorScreen({ projectId, onBack }) {
           <div className="pane-head">
             <h2>五線譜入力</h2>
             <span className="hint">
-              五線をクリックで音符追加 / ドラッグで音高変更 / ↑↓で音程、1〜5で音価
-              {editorState.chordMode ? ' / 和音モード: クリックで重ねる' : ' / Cキーで和音モード'}
+              {editorState.noteInputMode
+                ? '五線をクリックで音符追加 / ドラッグで音高変更 / ↑↓で音程、1〜5で音価'
+                : '操作モード: クリックでは音符を追加しません（選択・ドラッグのみ）'}
+              {editorState.noteInputMode && (editorState.chordMode
+                ? ' / 和音モード: クリックで重ねる'
+                : ' / Cキーで和音モード')}
               {editorState.pianoMode
                 ? ' / 鍵盤入力: 弾くたびに続きへ挿入（Z/Xでオクターブ）'
                 : ''}
@@ -728,6 +740,7 @@ export default function EditorScreen({ projectId, onBack }) {
               highlightedNoteId={playingNoteId ?? hoveredNoteId}
               onHoverNote={setHoveredNoteId}
               chordMode={editorState.chordMode}
+              noteInputMode={editorState.noteInputMode}
               width={scoreWidth}
             />
           </div>
