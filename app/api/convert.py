@@ -9,13 +9,15 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 from ..domain.tuning import get_tuning
 from ..optimizer.fingering_optimizer import optimize
 from ..optimizer.scoring import ScoringWeights
-from ..parser.midi_parser import parse_midi
-from ..parser.musicxml_parser import parse_musicxml
+from ..parser.common import ParsedPart
+from ..parser.midi_parser import parse_midi, parse_midi_parts
+from ..parser.musicxml_parser import parse_musicxml, parse_musicxml_parts
 from ..renderer.tab_renderer import render_details, render_text
 from .schemas import (
     ConvertRequest,
     ConvertResponse,
     FingeringSchema,
+    ImportPartSchema,
     ImportResponse,
     MeasureSchema,
     NoteSchema,
@@ -95,31 +97,61 @@ def convert(request: ConvertRequest) -> ConvertResponse:
     )
 
 
+def _lift_midi_notation_octave(part: ParsedPart) -> None:
+    """MIDIは実音。五線譜はギター記譜（実音より1オクターブ上）で扱うため持ち上げる。"""
+    for note in part.score.notes:
+        if note.midiNumber is not None:
+            note.midiNumber += 12
+            note.octave += 1
+    part.score.warnings.append(
+        "MIDIの実音を、ギター記譜（実音より1オクターブ上）に変換して読み込みました。"
+    )
+
+
 @router.post("/import", response_model=ImportResponse)
 async def import_score(file: UploadFile = File(...)) -> ImportResponse:
-    """MusicXML / MIDI ファイルを読み込んで Note 列に変換する（設計書 17.2）。"""
+    """MusicXML / MIDI ファイルを読み込んで Note 列に変換する（設計書 17.2 パート選択）。
+
+    複数トラック（パート）を含む場合は全パートを抽出して返し、既定では先頭パートの
+    内容をトップレベルにも複製する。どのパートを使うかは呼び出し側（画面）で選べる。
+    """
     filename = (file.filename or "").lower()
     content = await file.read()
 
     if filename.endswith((".mid", ".midi")):
-        parsed = parse_midi(content)
-        # MIDIは実音。五線譜はギター記譜（実音より1オクターブ上）で扱うため持ち上げる
-        for note in parsed.notes:
-            if note.midiNumber is not None:
-                note.midiNumber += 12
-                note.octave += 1
-        parsed.warnings.append("MIDIの実音を、ギター記譜（実音より1オクターブ上）に変換して読み込みました。")
+        title, parts = parse_midi_parts(content)
+        for part in parts:
+            _lift_midi_notation_octave(part)
     elif filename.endswith((".xml", ".musicxml", ".mxl")):
-        parsed = parse_musicxml(content, filename)
+        title, parts = parse_musicxml_parts(content, filename)
     else:
         raise HTTPException(
             status_code=422,
             detail="対応していない形式です（.musicxml / .xml / .mxl / .mid / .midi）",
         )
 
+    if not parts:
+        raise HTTPException(status_code=422, detail="読み込めるパートが見つかりませんでした")
+
+    part_schemas = [
+        ImportPartSchema(
+            index=part.index,
+            name=part.name,
+            noteCount=sum(1 for note in part.score.notes if not note.isRest),
+            notes=[NoteSchema.from_domain(note) for note in part.score.notes],
+            measures=[MeasureSchema.from_domain(measure) for measure in part.score.measures],
+            warnings=part.score.warnings,
+        )
+        for part in parts
+    ]
+    # 既定では、実際に音符を含む最初のパートを選ぶ（打楽器トラックなどが
+    # 先頭に来ていても、空のパートが既定にならないようにする）
+    default = next((part for part in part_schemas if part.noteCount > 0), part_schemas[0])
+
     return ImportResponse(
-        title=parsed.title,
-        notes=[NoteSchema.from_domain(note) for note in parsed.notes],
-        measures=[MeasureSchema.from_domain(measure) for measure in parsed.measures],
-        warnings=parsed.warnings,
+        title=title,
+        notes=default.notes,
+        measures=default.measures,
+        warnings=default.warnings,
+        parts=part_schemas,
     )

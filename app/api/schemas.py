@@ -113,11 +113,23 @@ class ConvertResponse(BaseModel):
     measures: list[MeasureSchema] | None = None
 
 
-class ImportResponse(BaseModel):
-    title: str | None = None
+class ImportPartSchema(BaseModel):
+    index: int
+    name: str
+    noteCount: int
     notes: list[NoteSchema] = Field(default_factory=list)
     measures: list[MeasureSchema] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+
+
+class ImportResponse(BaseModel):
+    title: str | None = None
+    # 既定（先頭）パートの内容。パートが1つしかない場合はこれをそのまま使えばよい
+    notes: list[NoteSchema] = Field(default_factory=list)
+    measures: list[MeasureSchema] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    # 全パート一覧（設計書 17.2 パート選択）。複数ある場合はUIで選び直せる
+    parts: list[ImportPartSchema] = Field(default_factory=list)
 
 
 class ProjectCreateRequest(BaseModel):

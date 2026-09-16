@@ -389,16 +389,34 @@ export default function EditorScreen({ projectId, onBack }) {
   useEffect(() => stopPlayback, [stopPlayback])
 
   // --- インポート -----------------------------------------------------------
+  // MusicXML/MIDIが複数パート(トラック)を含む場合、どれを読み込むか選べるようにする
+  const [importChoice, setImportChoice] = useState(null)
+
+  const applyImportedPart = useCallback(
+    (part) => {
+      history.set(fromApiScore(part))
+      setSelectedIds([])
+      setStatus(
+        [
+          `${part.notes.length} 個の音符を読み込みました${part.name ? `（${part.name}）` : ''}`,
+          ...(part.warnings ?? []),
+        ].join(' / '),
+      )
+      setImportChoice(null)
+    },
+    [history],
+  )
+
   const importFile = async (event) => {
     const file = event.target.files?.[0]
     if (!file) return
     try {
       const imported = await api.importScore(file)
-      history.set(fromApiScore(imported))
-      setSelectedIds([])
-      setStatus(
-        [`${imported.notes.length} 個の音符を読み込みました`, ...(imported.warnings ?? [])].join(' / '),
-      )
+      if (imported.parts.length > 1) {
+        setImportChoice(imported)
+      } else {
+        applyImportedPart(imported.parts[0] ?? imported)
+      }
     } catch (importError) {
       setError(`読み込みに失敗しました: ${importError.message}`)
     } finally {
@@ -801,6 +819,43 @@ export default function EditorScreen({ projectId, onBack }) {
           </div>
         </section>
       </div>
+
+      {importChoice && (
+        <div className="modal-backdrop" onClick={() => setImportChoice(null)}>
+          <div className="modal-panel" onClick={(event) => event.stopPropagation()}>
+            <h3>読み込むパートを選択</h3>
+            <p className="modal-note">
+              {importChoice.title ? `「${importChoice.title}」` : 'このファイル'}
+              には{importChoice.parts.length}個のパート（トラック）があります。
+            </p>
+            <ul className="import-part-list">
+              {importChoice.parts.map((part) => (
+                <li key={part.index}>
+                  <button
+                    type="button"
+                    className="import-part-button"
+                    disabled={part.noteCount === 0}
+                    onClick={() => applyImportedPart(part)}
+                  >
+                    <span className="import-part-name">{part.name}</span>
+                    <span className="import-part-meta">
+                      {part.noteCount > 0 ? `音符 ${part.noteCount} 個` : '音符なし'}
+                    </span>
+                    {part.warnings.length > 0 && (
+                      <span className="import-part-warning">{part.warnings.join(' / ')}</span>
+                    )}
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <div className="modal-actions">
+              <button type="button" className="text-button" onClick={() => setImportChoice(null)}>
+                キャンセル
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

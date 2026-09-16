@@ -97,6 +97,63 @@ class TestImport:
         response = client.post("/api/import", files={"file": ("song.txt", b"x", "text/plain")})
         assert response.status_code == 422
 
+    def test_single_part_file_exposes_one_part(self, client, musicxml_bytes):
+        response = client.post(
+            "/api/import",
+            files={"file": ("melody.musicxml", musicxml_bytes, "application/xml")},
+        )
+        body = response.json()
+        assert len(body["parts"]) == 1
+        assert body["parts"][0]["name"]
+
+    def test_multi_part_file_exposes_every_part_with_names(self, client, multi_part_musicxml_bytes):
+        response = client.post(
+            "/api/import",
+            files={"file": ("song.musicxml", multi_part_musicxml_bytes, "application/xml")},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        names = [part["name"] for part in body["parts"]]
+        assert names == ["Bass", "Lead Guitar"]
+        # 各パートが自分自身のノート列を独立して持っている
+        assert body["parts"][0]["notes"][0]["pitchName"] == "C"
+        assert body["parts"][0]["notes"][0]["octave"] == 2
+        assert body["parts"][1]["notes"][0]["octave"] == 5
+
+    def test_top_level_notes_default_to_first_part(self, client, multi_part_musicxml_bytes):
+        response = client.post(
+            "/api/import",
+            files={"file": ("song.musicxml", multi_part_musicxml_bytes, "application/xml")},
+        )
+        body = response.json()
+        assert body["notes"] == body["parts"][0]["notes"]
+
+    def test_percussion_track_does_not_crash_and_is_skipped_with_a_warning(
+        self, client, percussion_midi_bytes
+    ):
+        response = client.post(
+            "/api/import",
+            files={"file": ("drums_and_lead.mid", percussion_midi_bytes, "audio/midi")},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        names = {part["name"]: part for part in body["parts"]}
+        assert names["Drums"]["noteCount"] == 0
+        assert "打楽器" in "".join(names["Drums"]["warnings"])
+        assert names["Lead Guitar"]["noteCount"] == 4
+
+    def test_default_part_skips_an_empty_leading_percussion_track(
+        self, client, percussion_midi_bytes
+    ):
+        # 先頭パートが打楽器（音符0個）でも、既定では音符のある方を選ぶ
+        response = client.post(
+            "/api/import",
+            files={"file": ("drums_and_lead.mid", percussion_midi_bytes, "audio/midi")},
+        )
+        body = response.json()
+        assert body["parts"][0]["name"] == "Drums"
+        assert len(body["notes"]) > 0
+
 
 class TestProjects:
     def test_crud_lifecycle(self, client):
