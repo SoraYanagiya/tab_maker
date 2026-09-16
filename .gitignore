@@ -7,3 +7,8 @@ node_modules/
 frontend/dist/
 
 data/projects/*.json
+
+# PyInstaller ビルド成果物（scripts/build_app.sh のフラグから毎回再生成する）
+build/
+dist/
+GuitarTabMaker.spec

@@ -4,3 +4,10 @@ music21>=9.1
 python-multipart>=0.0.9
 httpx>=0.27
 pytest>=8.0
+
+# スタンドアロンアプリ（macOS）用
+pywebview>=6.0
+pyobjc-framework-Cocoa>=10.0
+pyobjc-framework-WebKit>=10.0
+pyobjc-framework-Quartz>=10.0
+pyinstaller>=6.0

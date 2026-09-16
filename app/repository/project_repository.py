@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -24,6 +25,9 @@ def default_data_dir() -> Path:
     configured = os.environ.get("TAB_MAKER_DATA_DIR")
     if configured:
         return Path(configured).expanduser()
+    if getattr(sys, "frozen", False):
+        # スタンドアロンアプリでは、インストール場所によらず同じ場所にプロジェクトを保存する
+        return Path.home() / "Library" / "Application Support" / "GuitarTabMaker" / "projects"
     return Path(__file__).resolve().parents[2] / "data" / "projects"
 
 

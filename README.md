@@ -46,6 +46,20 @@ cd frontend && npm run dev                           # http://localhost:5173
 .venv/bin/python -m pytest tests/ -q
 ```
 
+## スタンドアロンアプリ（macOS）
+
+サーバーを立てず、ダブルクリックで起動するネイティブアプリとして使うこともできる。データはブラウザ版と同様にローカルのJSONファイルに保存され、外部通信は行わない。
+
+```bash
+./scripts/build_app.sh
+open dist/GuitarTabMaker.app
+```
+
+- 保存先は `~/Library/Application Support/GuitarTabMaker/projects/`（インストール場所やビルドし直しに影響されない）
+- pywebview（ネイティブウィンドウ）+ 内部でFastAPIサーバーをバックグラウンド起動する構成。ブラウザは使わない
+- `dist/GuitarTabMaker.app` を `/Applications` にコピーすれば、他のアプリと同じように使える
+- 初回ビルドには `pywebview` / `pyinstaller` などの追加依存が必要（`requirements.txt` に含まれる）
+
 ## 操作
 
 | 操作 | 内容 |
@@ -84,6 +98,7 @@ app/
   parser/      MusicXML / MIDI パーサー（music21）                （設計書 11章）
   repository/  プロジェクトのJSON永続化                           （設計書 17.7）
   api/         /api/convert・/api/import・/api/projects           （設計書 12.3・17.7.3）
+  desktop.py   スタンドアロンアプリのエントリポイント（pywebview）
 frontend/src/
   music/       音高・スコアモデル
   components/  プロジェクト一覧 / 五線譜エディタ / TABプレビュー   （設計書 17.2）

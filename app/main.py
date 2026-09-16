@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -10,7 +11,16 @@ from fastapi.staticfiles import StaticFiles
 
 from .api import convert, projects
 
-FRONTEND_DIST = Path(__file__).resolve().parents[1] / "frontend" / "dist"
+
+def _base_dir() -> Path:
+    """通常実行時はリポジトリのルート、PyInstallerでのスタンドアロン実行時は展開先を返す。"""
+    bundled = getattr(sys, "_MEIPASS", None)
+    if bundled:
+        return Path(bundled)
+    return Path(__file__).resolve().parents[1]
+
+
+FRONTEND_DIST = _base_dir() / "frontend" / "dist"
 
 app = FastAPI(title="Guitar TAB Maker", version="1.0.0")
 
