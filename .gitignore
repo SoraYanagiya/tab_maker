@@ -1,14 +1,27 @@
+# Python
 .venv/
 __pycache__/
 *.pyc
+*.pyo
 .pytest_cache/
+*.egg-info/
 
+# Node / フロントエンド
 node_modules/
 frontend/dist/
+npm-debug.log*
 
+# アプリのデータ・環境変数
 data/projects/*.json
+.env
+.env.local
 
 # PyInstaller ビルド成果物（scripts/build_app.sh のフラグから毎回再生成する）
 build/
 dist/
 GuitarTabMaker.spec
+
+# OS / エディタ
+.DS_Store
+.vscode/
+.idea/
