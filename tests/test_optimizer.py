@@ -105,6 +105,52 @@ class TestCandidateGeneration:
         assert result.fingerings[0].fret is not None
 
 
+class TestGlobalPositionMinimization:
+    """曲全体を通してポジション移動が少なくなるように最適化する（設計書 8.3）。"""
+
+    # 音域を広く跳躍するランダム旋律（乱数シード15由来、固定値として埋め込み）。
+    # 大きな跳躍を繰り返し含む点が、ポジション移動の要否が分かれる典型的なケース。
+    LEAPING_MELODY = [
+        58, 54, 59, 55, 53, 52, 48, 44, 42, 44, 43, 40, 42, 46, 48, 49, 52, 53,
+        55, 54, 53, 55, 57, 56, 57, 62, 65, 64, 59, 63, 66, 70, 67, 71, 66, 68,
+        72, 67, 69, 73, 76, 73, 77, 73, 72, 70, 75, 73, 68,
+    ]
+
+    def _shift_count(self, weights: ScoringWeights) -> int:
+        notes = timed_notes(self.LEAPING_MELODY, Duration.EIGHTH)
+        result = optimize(notes, measures_for(notes), notation_octave_shift=0, weights=weights)
+        return sum(1 for f in result.fingerings if f.fret and f.handShift)
+
+    def test_default_weight_reduces_shift_count_versus_a_weak_one(self):
+        # position_change の既定値(15)は、弱い重み(6)よりも明確に移動回数を減らす
+        assert self._shift_count(ScoringWeights(position_change=15)) < self._shift_count(
+            ScoringWeights(position_change=6)
+        )
+
+    def test_default_beam_width_reaches_the_exact_optimum(self):
+        # 既定のビーム幅(24)が、より広いビーム幅と同じ総コストに達することを確認し、
+        # 探索が局所的な近似ではなく厳密解（状態空間の広さに対して十分な余裕）で
+        # あることを保証する。極端に狭いビーム幅(8など)では劣化することがある。
+        notes = timed_notes(self.LEAPING_MELODY, Duration.EIGHTH)
+        measures = measures_for(notes)
+        default_width = optimize(notes, measures, notation_octave_shift=0, weights=ScoringWeights())
+        wide = optimize(
+            notes, measures, notation_octave_shift=0, weights=ScoringWeights(beam_width=5000)
+        )
+        assert default_width.totalCost == pytest.approx(wide.totalCost)
+
+    def test_returns_to_the_same_position_after_a_brief_excursion(self):
+        # 低いポジションのリフの合間に高い音が1つだけ挟まる場合、
+        # 前後のリフの基準ポジションは同じに戻り、移動はちょうど2回（行き・帰り）で済む
+        riff = [45, 48, 50, 52, 45, 48, 50, 52]
+        notes = make_notes(riff + [79] + riff)
+        result = optimize(notes, notation_octave_shift=0)
+        shifts = [f.handShift for f in result.fingerings if f.handShift]
+        assert len(shifts) == 2
+        # リフの4音目（最初のポジションが確定した時点）と最後の音は同じポジションに戻る
+        assert result.fingerings[3].position == result.fingerings[-1].position
+
+
 class TestOpenStringRule:
     """開放弦はポジション移動の制限に入らない（設計書 7.4）。"""
 
