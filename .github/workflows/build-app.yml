@@ -1,0 +1,66 @@
+name: Build standalone app
+
+# push・手動実行のたびに macOS / Windows 向けアプリをビルドし、Artifact として保存する。
+# v* タグを push すると、GitHub Release を作成してビルド成果物を添付する。
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            artifact_name: GuitarTabMaker-macOS
+            build_script: bash scripts/build_app.sh
+            build_output: dist/GuitarTabMaker.app
+            zip_name: GuitarTabMaker-macOS.zip
+          - os: windows-latest
+            artifact_name: GuitarTabMaker-Windows
+            build_script: pwsh scripts/build_app.ps1
+            build_output: dist/GuitarTabMaker
+            zip_name: GuitarTabMaker-Windows.zip
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: アプリをビルド
+        run: ${{ matrix.build_script }}
+
+      - name: 成果物をZip化 (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          cd dist
+          ditto -c -k --sequesterRsrc --keepParent GuitarTabMaker.app ${{ matrix.zip_name }}
+
+      - name: 成果物をZip化 (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          Compress-Archive -Path dist/GuitarTabMaker -DestinationPath dist/${{ matrix.zip_name }}
+        shell: pwsh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: dist/${{ matrix.zip_name }}
+          retention-days: 30
+
+      - name: リリースに添付
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/${{ matrix.zip_name }}

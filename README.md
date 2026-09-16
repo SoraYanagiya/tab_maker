@@ -46,19 +46,36 @@ cd frontend && npm run dev                           # http://localhost:5173
 .venv/bin/python -m pytest tests/ -q
 ```
 
-## スタンドアロンアプリ（macOS）
+## スタンドアロンアプリ（macOS / Windows）
 
 サーバーを立てず、ダブルクリックで起動するネイティブアプリとして使うこともできる。データはブラウザ版と同様にローカルのJSONファイルに保存され、外部通信は行わない。
 
+### ビルド済みアプリをダウンロードする（一番簡単）
+
+このリポジトリの [Releases](../../releases) と [Actions](../../actions/workflows/build-app.yml) に、push のたびに自動ビルドされた macOS / Windows 版が置かれている。ダウンロードして解凍するだけで、Python や Node をインストールせずに使える。
+
+- macOS: `GuitarTabMaker-macOS.zip` を解凍し、`GuitarTabMaker.app` を `/Applications` にコピー
+- Windows: `GuitarTabMaker-Windows.zip` を解凍し、フォルダごと好きな場所に置いて `GuitarTabMaker.exe` を実行
+
+### 自分でビルドする
+
+このリポジトリを clone した直後の状態から、以下の1コマンドで venv 作成・依存インストール・ビルドまで完結する。
+
 ```bash
+# macOS / Linux
 ./scripts/build_app.sh
 open dist/GuitarTabMaker.app
 ```
 
-- 保存先は `~/Library/Application Support/GuitarTabMaker/projects/`（インストール場所やビルドし直しに影響されない）
+```powershell
+# Windows (PowerShell)
+.\scripts\build_app.ps1
+.\dist\GuitarTabMaker\GuitarTabMaker.exe
+```
+
+- 保存先はOSごとの標準的なアプリデータ置き場（`~/Library/Application Support/GuitarTabMaker/projects/`、`%APPDATA%\GuitarTabMaker\projects\`、`~/.local/share/GuitarTabMaker/projects/`）で、インストール場所やビルドし直しに影響されない
 - pywebview（ネイティブウィンドウ）+ 内部でFastAPIサーバーをバックグラウンド起動する構成。ブラウザは使わない
-- `dist/GuitarTabMaker.app` を `/Applications` にコピーすれば、他のアプリと同じように使える
-- 初回ビルドには `pywebview` / `pyinstaller` などの追加依存が必要（`requirements.txt` に含まれる）
+- CI（[.github/workflows/build-app.yml](.github/workflows/build-app.yml)）は push のたびに両OSでビルドし、`v*` タグを push するとGitHub Releaseにも自動で添付される
 
 ## 操作
 

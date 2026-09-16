@@ -730,6 +730,16 @@ DELETE /api/projects/{id}       プロジェクトを削除
 - `PUT /api/projects/{id}` は、五線譜編集画面での自動保存・手動保存の両方から呼び出される
 - `generatedTab` を保存しておくことで、プロジェクトを開き直した際に再生成せずに直前の結果をすぐ表示できる
 
+#### 17.7.4 スタンドアロンアプリでの保存先
+
+Webサーバーとして動かす場合はリポジトリ内の `data/projects/` に保存するが、pywebviewによるスタンドアロンアプリ（第17.4節の技術スタックに対する代替実行形態）では、インストール場所やビルドし直しに影響されないよう、OS標準のアプリデータ置き場に保存する。
+
+- macOS: `~/Library/Application Support/GuitarTabMaker/projects/`
+- Windows: `%APPDATA%\GuitarTabMaker\projects\`
+- Linux: `~/.local/share/GuitarTabMaker/projects/`
+
+ビルドはGitHub Actions（`.github/workflows/build-app.yml`）で自動化し、push のたびに両OS向けアプリを生成する。バージョンタグ（`v*`）を push するとGitHub Releaseにも自動で添付され、利用者はソースをビルドせずダウンロードするだけで使える。
+
 ---
 
 ## 18. まとめ

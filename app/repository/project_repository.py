@@ -21,13 +21,27 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def _standalone_data_dir() -> Path:
+    """スタンドアロンアプリでの保存先。OSごとの標準的なアプリデータ置き場を使う。"""
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "GuitarTabMaker" / "projects"
+    if sys.platform == "win32":
+        appdata = os.environ.get("APPDATA")
+        base = Path(appdata) if appdata else Path.home() / "AppData" / "Roaming"
+        return base / "GuitarTabMaker" / "projects"
+    # Linux 等
+    xdg = os.environ.get("XDG_DATA_HOME")
+    base = Path(xdg) if xdg else Path.home() / ".local" / "share"
+    return base / "GuitarTabMaker" / "projects"
+
+
 def default_data_dir() -> Path:
     configured = os.environ.get("TAB_MAKER_DATA_DIR")
     if configured:
         return Path(configured).expanduser()
     if getattr(sys, "frozen", False):
         # スタンドアロンアプリでは、インストール場所によらず同じ場所にプロジェクトを保存する
-        return Path.home() / "Library" / "Application Support" / "GuitarTabMaker" / "projects"
+        return _standalone_data_dir()
     return Path(__file__).resolve().parents[2] / "data" / "projects"
 
 

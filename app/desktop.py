@@ -6,10 +6,19 @@ FastAPIサーバーをローカルの空きポートでバックグラウンド�
 
 from __future__ import annotations
 
+import io
 import socket
+import sys
 import threading
 import time
 import urllib.request
+
+# --windowed でビルドした場合、コンソールが無いため sys.stdout/stderr が None になる。
+# その状態でログ出力しようとするライブラリがあるとクラッシュするため、先に埋めておく。
+if sys.stdout is None:
+    sys.stdout = io.StringIO()
+if sys.stderr is None:
+    sys.stderr = io.StringIO()
 
 import uvicorn
 import webview
