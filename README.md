@@ -1,7 +1,11 @@
 # ギターTAB譜メーカー
 
-五線譜で入力した単音旋律を、運指を最適化したギターTAB譜に変換するWebアプリケーション。
+五線譜で入力した単音旋律・和音を、運指を最適化したギターTAB譜に変換するアプリケーション。
 設計は [docs/design.md](docs/design.md) を参照。
+
+**[⬇ ダウンロードはこちら（macOS / Windows）](../../releases/tag/latest)** — インストール不要、解凍してすぐ使えます。
+
+![アプリのスクリーンショット](docs/images/screenshot.png)
 
 ## 特徴
 
