@@ -53,6 +53,9 @@ class EventPlacement:
     candidates: tuple[Candidate, ...]
     handPosition: int | None
     barreFret: int | None = None
+    # 和音の全音を同時に押さえられなかった場合、鳴らせなかった元のnoteIndex
+    # （設計書 9.3 部分和音のフォールバック）。空なら通常どおり全音を鳴らせている。
+    droppedNoteIndices: tuple[int, ...] = ()
     baseCost: float = 0.0
     transitionCost: float = 0.0
 
@@ -91,6 +94,7 @@ class EventPlacement:
             ),
             handPosition=self.handPosition,
             barreFret=self.barreFret,
+            droppedNoteIndices=self.droppedNoteIndices,
             baseCost=base,
             transitionCost=transition,
         )

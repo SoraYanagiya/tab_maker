@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 const TUNINGS = [
   { id: 'standard', label: 'レギュラー (EADGBE)' },
   { id: 'drop_d', label: 'ドロップD (DADGBE)' },
@@ -11,11 +13,28 @@ const WARNING_LABELS = {
   high_position: '高ポジション',
   out_of_range: '音域外',
   parser: '読み込み',
+  partial_chord: '和音を鳴らしきれない',
+  unplayable_chord: '押さえられない',
 }
 
-/** 警告表示と生成設定（設計書 17.2 / 17.7.1）。 */
-export default function WarningsPanel({ result, settings, onSettingsChange, onFocusNote }) {
+function describeAlternative(alternative) {
+  if (alternative.fingerings.length === 0) return '（無音）'
+  return alternative.fingerings
+    .map((fingering) => `${fingering.stringLabel}弦${fingering.fret}f`)
+    .join(' ')
+}
+
+/** 警告表示と生成設定（設計書 17.2 / 17.7.1 / 9.3）。 */
+export default function WarningsPanel({
+  result,
+  settings,
+  onSettingsChange,
+  onFocusNote,
+  onSelectAlternative,
+  onPreviewAlternative,
+}) {
   const warnings = result?.warnings ?? []
+  const [expandedKey, setExpandedKey] = useState(null)
 
   const setWeight = (key, value) =>
     onSettingsChange({
@@ -33,14 +52,62 @@ export default function WarningsPanel({ result, settings, onSettingsChange, onFo
           </p>
         )}
         <ul className="warning-list">
-          {warnings.map((warning, index) => (
-            <li key={`${warning.kind}-${warning.noteIndex}-${index}`}>
-              <button type="button" onClick={() => onFocusNote(warning.noteIndex)}>
-                <span className="warning-kind">{WARNING_LABELS[warning.kind] ?? warning.kind}</span>
-                <span className="warning-message">{warning.message}</span>
-              </button>
-            </li>
-          ))}
+          {warnings.map((warning, index) => {
+            const key = `${warning.kind}-${warning.noteIndex}-${index}`
+            const hasAlternatives = warning.alternatives?.length > 0
+            const expanded = expandedKey === key
+            return (
+              <li key={key}>
+                <div className="warning-item">
+                  <button
+                    type="button"
+                    className="warning-focus"
+                    onClick={() => onFocusNote(warning.noteIndex)}
+                  >
+                    <span className="warning-kind">{WARNING_LABELS[warning.kind] ?? warning.kind}</span>
+                    <span className="warning-message">{warning.message}</span>
+                  </button>
+                  {hasAlternatives && (
+                    <button
+                      type="button"
+                      className="warning-toggle"
+                      onClick={() => setExpandedKey(expanded ? null : key)}
+                    >
+                      別の押さえ方を選ぶ {expanded ? '▲' : '▼'}
+                    </button>
+                  )}
+                </div>
+
+                {expanded && (
+                  <ul className="alternative-list">
+                    {warning.alternatives.map((alternative, altIndex) => (
+                      <li key={altIndex} className="alternative-row">
+                        <span className="alternative-preview">{describeAlternative(alternative)}</span>
+                        <div className="alternative-actions">
+                          <button
+                            type="button"
+                            className="text-button"
+                            title="この形の音を確認する"
+                            onClick={() => onPreviewAlternative(alternative.fingerings)}
+                          >
+                            試聴
+                          </button>
+                          <button
+                            type="button"
+                            className={`text-button${alternative.isCurrent ? ' is-current' : ''}`}
+                            disabled={alternative.isCurrent}
+                            onClick={() => onSelectAlternative(warning.noteIndex, alternative.droppedNoteIndices)}
+                          >
+                            {alternative.isCurrent ? '使用中' : 'この形を使う'}
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            )
+          })}
         </ul>
       </section>
 

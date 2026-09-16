@@ -595,7 +595,12 @@ input[type='text'] {
   gap: 6px;
 }
 
-.warning-list button {
+.warning-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.warning-focus {
   width: 100%;
   text-align: left;
   border: none;
@@ -617,6 +622,57 @@ input[type='text'] {
   font-size: 11px;
   line-height: 1.5;
   color: var(--ink);
+}
+
+.warning-toggle {
+  align-self: flex-start;
+  margin-top: 4px;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-size: 10px;
+  padding: 0;
+}
+
+.alternative-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 8px 0 0 8px;
+  border-left: 2px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.alternative-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.alternative-preview {
+  font-size: 11px;
+  font-family: ui-monospace, monospace;
+  color: var(--ink);
+}
+
+.alternative-actions {
+  display: flex;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.alternative-actions .text-button {
+  padding: 4px 8px;
+  font-size: 10px;
+}
+
+.alternative-actions .text-button.is-current {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .field {

@@ -13,6 +13,7 @@ from ..parser.midi_parser import parse_midi
 from ..parser.musicxml_parser import parse_musicxml
 from ..renderer.tab_renderer import render_details, render_text
 from .schemas import (
+    ChordAlternativeSchema,
     ConvertRequest,
     ConvertResponse,
     FingeringSchema,
@@ -24,6 +25,28 @@ from .schemas import (
 )
 
 router = APIRouter(prefix="/api", tags=["convert"])
+
+
+def _fingering_to_schema(fingering) -> FingeringSchema:
+    return FingeringSchema(**vars(fingering))
+
+
+def _warning_to_schema(warning) -> WarningSchema:
+    return WarningSchema(
+        noteIndex=warning.noteIndex,
+        measureIndex=warning.measureIndex,
+        onsetBeat=warning.onsetBeat,
+        kind=warning.kind,
+        message=warning.message,
+        alternatives=[
+            ChordAlternativeSchema(
+                droppedNoteIndices=alternative.droppedNoteIndices,
+                fingerings=[_fingering_to_schema(f) for f in alternative.fingerings],
+                isCurrent=alternative.isCurrent,
+            )
+            for alternative in warning.alternatives
+        ],
+    )
 
 
 def _decode_content(request: ConvertRequest):
@@ -62,12 +85,16 @@ def convert(request: ConvertRequest) -> ConvertResponse:
     tuning = get_tuning(request.settings.tuning)
     weights = ScoringWeights.from_dict(request.settings.weights)
 
+    chord_drops = {
+        int(key): set(value) for key, value in request.settings.chordDrops.items()
+    }
     result = optimize(
         notes,
         measures,
         tuning=tuning,
         weights=weights,
         notation_octave_shift=request.settings.notationOctaveShift,
+        chord_drops=chord_drops,
     )
 
     tab = render_text(notes, result.fingerings, tuning, request.settings.measuresPerLine)
@@ -75,7 +102,7 @@ def convert(request: ConvertRequest) -> ConvertResponse:
         render_details(notes, result.fingerings, tuning) if request.settings.includeDetails else None
     )
 
-    warnings = [WarningSchema(**vars(warning)) for warning in result.warnings]
+    warnings = [_warning_to_schema(warning) for warning in result.warnings]
     for message in parser_warnings:
         warnings.insert(
             0,

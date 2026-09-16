@@ -159,3 +159,115 @@ class TestChordProgression:
         started = time.perf_counter()
         optimize(notes, measures, notation_octave_shift=0)
         assert time.perf_counter() - started < 5.0
+
+
+class TestUnplayableChordFallback:
+    """全音を鳴らせない和音は、何も表示しないのではなく最大限の部分和音を鳴らす（設計書 9.3）。"""
+
+    # E2〜A#2の7半音クラスタ。低いE弦・A弦の2本でしか届かないため、
+    # 物理的に同時に鳴らせるのは最大2音（各弦1音まで）。
+    UNPLAYABLE_CLUSTER = [40, 41, 42, 43, 44, 45, 46]
+
+    def test_does_not_leave_every_note_silent(self):
+        notes = chord_notes(self.UNPLAYABLE_CLUSTER)
+        result = optimize(notes, [MeasureInfo(0)], notation_octave_shift=0)
+        played = [f for f in result.fingerings if f.fret is not None]
+        assert played, "1音も鳴らないのはおかしい（最大限の部分和音になるべき）"
+
+    def test_plays_the_maximum_reachable_note_count(self):
+        # このクラスタは6弦中2本(E,A)しか届かないため、理論上の最大は2音
+        notes = chord_notes(self.UNPLAYABLE_CLUSTER)
+        result = optimize(notes, [MeasureInfo(0)], notation_octave_shift=0)
+        played = [f for f in result.fingerings if f.fret is not None]
+        assert len(played) == 2
+
+    def test_dropped_notes_are_marked_distinctly_from_rests(self):
+        notes = chord_notes(self.UNPLAYABLE_CLUSTER)
+        result = optimize(notes, [MeasureInfo(0)], notation_octave_shift=0)
+        dropped = [f for f in result.fingerings if f.isDropped]
+        assert len(dropped) == len(self.UNPLAYABLE_CLUSTER) - 2
+        assert all(not f.isRest for f in dropped), "ドロップは休符とは異なる"
+
+    def test_emits_a_partial_chord_warning(self):
+        notes = chord_notes(self.UNPLAYABLE_CLUSTER)
+        result = optimize(notes, [MeasureInfo(0)], notation_octave_shift=0)
+        warnings = [w for w in result.warnings if w.kind == "partial_chord"]
+        assert len(warnings) == 1
+        assert "2音" in warnings[0].message
+
+    def test_fully_playable_chord_has_no_partial_warning_or_dropped_notes(self):
+        notes = chord_notes(CHORDS["C"])
+        result = optimize(notes, [MeasureInfo(0)], notation_octave_shift=0)
+        assert not any(w.kind == "partial_chord" for w in result.warnings)
+        assert not any(f.isDropped for f in result.fingerings)
+
+    def test_renders_the_partial_chord_in_tab_instead_of_a_blank_column(self):
+        notes = chord_notes(self.UNPLAYABLE_CLUSTER)
+        result = optimize(notes, [MeasureInfo(0)], notation_octave_shift=0)
+        tab = render_text(notes, result.fingerings)
+        digit_lines = [line for line in tab.splitlines() if any(ch.isdigit() for ch in line)]
+        assert digit_lines, "部分和音が音符として描画されているべき"
+
+    def test_warning_offers_multiple_distinct_alternatives(self):
+        notes = chord_notes(self.UNPLAYABLE_CLUSTER)
+        result = optimize(notes, [MeasureInfo(0)], notation_octave_shift=0)
+        warning = next(w for w in result.warnings if w.kind == "partial_chord")
+        assert len(warning.alternatives) >= 2
+        drop_sets = [frozenset(alt.droppedNoteIndices) for alt in warning.alternatives]
+        assert len(drop_sets) == len(set(drop_sets)), "代替案は重複しないべき"
+        assert sum(1 for alt in warning.alternatives if alt.isCurrent) == 1
+
+    def test_alternative_previews_only_include_kept_notes(self):
+        notes = chord_notes(self.UNPLAYABLE_CLUSTER)
+        result = optimize(notes, [MeasureInfo(0)], notation_octave_shift=0)
+        warning = next(w for w in result.warnings if w.kind == "partial_chord")
+        for alternative in warning.alternatives:
+            kept = len(self.UNPLAYABLE_CLUSTER) - len(alternative.droppedNoteIndices)
+            assert len(alternative.fingerings) == kept
+
+    def test_chord_drops_forces_a_specific_choice(self):
+        # noteIndex 1,2,3,4,6 を鳴らさないよう明示的に選ぶ -> 0と5だけが残る
+        notes = chord_notes(self.UNPLAYABLE_CLUSTER)
+        result = optimize(
+            notes, [MeasureInfo(0)], notation_octave_shift=0, chord_drops={0: {1, 2, 3, 4, 6}}
+        )
+        played_indices = {f.noteIndex for f in result.fingerings if f.fret is not None}
+        assert played_indices == {0, 5}
+
+    def test_chord_drops_can_still_trigger_a_further_automatic_drop(self):
+        # 40と41はどちらもE弦でしか届かないため、この2音を残す指定をしても
+        # さらに自動で1音減らされ、新たな警告が出る
+        notes = chord_notes(self.UNPLAYABLE_CLUSTER)
+        result = optimize(
+            notes, [MeasureInfo(0)], notation_octave_shift=0, chord_drops={0: {2, 3, 4, 6}}
+        )
+        played = [f for f in result.fingerings if f.fret is not None]
+        assert len(played) == 2
+        warnings = [w for w in result.warnings if w.kind == "partial_chord"]
+        assert len(warnings) == 1
+
+    def test_performance_with_many_unplayable_chords(self):
+        # 部分和音探索・代替案生成はイベントごとにコストがかかるため、
+        # 弾けない和音が連続しても許容時間内に収まることを確認する
+        notes = []
+        measures = []
+        for i in range(30):
+            base = 40 + (i % 5)
+            notes += chord_notes([base + step for step in range(7)], measure=i)
+            measures.append(MeasureInfo(i))
+        started = time.perf_counter()
+        optimize(notes, measures, notation_octave_shift=0)
+        assert time.perf_counter() - started < 5.0
+
+    def test_fully_reachable_forced_subset_has_no_extra_warning(self):
+        # 1音だけ選べば必ず鳴らせるため、警告は出ないはず
+        notes = chord_notes(self.UNPLAYABLE_CLUSTER)
+        result = optimize(
+            notes,
+            [MeasureInfo(0)],
+            notation_octave_shift=0,
+            chord_drops={0: {1, 2, 3, 4, 5, 6}},
+        )
+        assert not any(w.kind == "partial_chord" for w in result.warnings)
+        played = [f for f in result.fingerings if f.fret is not None]
+        assert len(played) == 1
