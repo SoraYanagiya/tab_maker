@@ -1,4 +1,4 @@
-"""music21 のスコアを共通の Note 列へ変換する（設計書 11.2）。"""
+"""music21 のスコアを共通の Note 列へ変換する（設計書 11.2 / 17.2）。"""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from music21 import chord, converter, note as m21_note, stream
+from music21.note import Unpitched
 
 from ..domain.note import Accidental, Duration, MeasureInfo, Note
 
@@ -37,6 +38,15 @@ class ParsedScore:
     warnings: list[str] = field(default_factory=list)
 
 
+@dataclass
+class ParsedPart:
+    """1トラック（パート）分の抽出結果（設計書 17.2 パート選択）。"""
+
+    index: int
+    name: str
+    score: ParsedScore
+
+
 def duration_from_quarter_length(quarter_length: float) -> tuple[Duration, bool]:
     best = min(QUARTER_LENGTH_TABLE, key=lambda row: abs(row[0] - quarter_length))
     return best[1], best[2]
@@ -53,21 +63,29 @@ def parse_file(content: bytes, suffix: str):
         path.unlink(missing_ok=True)
 
 
-def _first_part(score) -> stream.Stream:
+def list_parts(score) -> list[stream.Stream]:
+    """スコアに含まれる全パート（トラック）を返す。パートが無い場合はスコア自体を1パートとして扱う。"""
     parts = list(score.parts) if hasattr(score, "parts") else []
-    if parts:
-        return parts[0]
-    return score
+    return parts if parts else [score]
 
 
-def score_to_notes(score) -> ParsedScore:
-    """music21 スコアから、単音旋律としての Note 列を取り出す。"""
+def _part_display_name(part: stream.Stream, index: int) -> str:
+    """パートの表示名を決める（トラック名 → 楽器名 → 連番の順に採用）。"""
+    name = getattr(part, "partName", None)
+    if name and str(name).strip():
+        return str(name).strip()
+
+    instrument_obj = part.getInstrument(returnDefault=False)
+    if instrument_obj is not None and instrument_obj.instrumentName:
+        return str(instrument_obj.instrumentName)
+
+    return f"トラック {index + 1}"
+
+
+def _extract_part(part: stream.Stream) -> ParsedScore:
+    """1パート分の音符列を抽出する（設計書 5.1 / 9.2）。"""
     result = ParsedScore()
-    metadata = getattr(score, "metadata", None)
-    if metadata is not None and metadata.title:
-        result.title = metadata.title
 
-    part = _first_part(score)
     measures = list(part.getElementsByClass(stream.Measure))
     if not measures:
         part = part.makeMeasures()
@@ -76,6 +94,7 @@ def score_to_notes(score) -> ParsedScore:
     key_signature = "C"
     time_signature = "4/4"
     has_chord = False
+    skipped_unpitched = 0
 
     for measure_index, measure in enumerate(measures):
         if measure.keySignature is not None:
@@ -110,6 +129,12 @@ def score_to_notes(score) -> ParsedScore:
                 )
                 continue
 
+            if isinstance(element, Unpitched):
+                # 打楽器トラックなどの「高さを持たない音」は、単音/和音モデルでは
+                # 表現できないためスキップする（設計書はギターの音高付き旋律が対象）
+                skipped_unpitched += 1
+                continue
+
             tie_to_next = element.tie is not None and element.tie.type in ("start", "continue")
             # 和音は、同じ拍位置に複数のNoteとして展開する（設計書 9.2）
             pitches = (
@@ -141,10 +166,41 @@ def score_to_notes(score) -> ParsedScore:
 
     if has_chord:
         result.warnings.append("和音を含む譜面として読み込みました。")
+    if skipped_unpitched:
+        result.warnings.append(
+            f"高さを持たない音（打楽器など）を{skipped_unpitched}個スキップしました。"
+        )
     if not result.measures:
         result.measures.append(MeasureInfo(measureIndex=0))
 
     return result
+
+
+def score_to_parts(score) -> list[ParsedPart]:
+    """スコアに含まれる全パートを抽出する（設計書 17.2 パート選択）。"""
+    return [
+        ParsedPart(index=index, name=_part_display_name(part, index), score=_extract_part(part))
+        for index, part in enumerate(list_parts(score))
+    ]
+
+
+def score_to_notes(score) -> ParsedScore:
+    """music21 スコアから、単音旋律としての Note 列を取り出す（後方互換: 先頭パートのみ）。"""
+    result = ParsedScore()
+    metadata = getattr(score, "metadata", None)
+    if metadata is not None and metadata.title:
+        result.title = metadata.title
+
+    extracted = _extract_part(list_parts(score)[0])
+    extracted.title = result.title
+    return extracted
+
+
+def score_title(score) -> str | None:
+    metadata = getattr(score, "metadata", None)
+    if metadata is not None and metadata.title:
+        return metadata.title
+    return None
 
 
 def _key_signature_name(key_signature) -> str:
