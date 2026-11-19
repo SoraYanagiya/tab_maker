@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import itertools
 from dataclasses import dataclass, field
 from typing import NamedTuple
 
@@ -40,6 +41,18 @@ class Fingering:
     isTiedContinuation: bool = False
     isBarre: bool = False
     chordSize: int = 1
+    # 和音の全音を押さえる形が見つからず、この音だけ自動的に鳴らせなかった
+    # （休符ではなく、本来は音があった）ことを示す（設計書 9.3）
+    isDropped: bool = False
+
+
+@dataclass
+class ChordAlternative:
+    """部分和音フォールバックの、選び直せる別の押さえ方（設計書 9.3）。"""
+
+    droppedNoteIndices: list[int] = field(default_factory=list)
+    fingerings: list[Fingering] = field(default_factory=list)
+    isCurrent: bool = False
 
 
 @dataclass
@@ -49,6 +62,7 @@ class ConversionWarning:
     onsetBeat: float
     kind: str
     message: str
+    alternatives: list[ChordAlternative] = field(default_factory=list)
 
 
 @dataclass
@@ -221,7 +235,55 @@ def _barre_blocks_open_string(shape: dict[int, tuple[int, int]], barre_fret: int
 def generate_event_placements(
     event: _Event, tuning: Tuning, state: State, weights: ScoringWeights
 ) -> list[EventPlacement]:
-    """イベント（単音または和音）に対する押さえ方の候補を列挙する（設計書 9.2）。"""
+    """イベント（単音または和音）に対する押さえ方の候補を列挙する（設計書 9.2 / 9.3）。
+
+    全音を同時に押さえる形が見つからない場合は、実際に押さえられる音数が
+    最も多い部分和音にフォールバックする（設計書 9.3）。
+    """
+    placements = _generate_exact_placements(event, tuning, state, weights)
+    if placements or len(event.midis) <= 1:
+        return placements
+    return _generate_partial_placements(event, tuning, state, weights)
+
+
+def _generate_partial_placements(
+    event: "_Event", tuning: Tuning, state: State, weights: ScoringWeights
+) -> list[EventPlacement]:
+    """全音を鳴らせない和音に対して、鳴らせる音数が最大になる部分和音を探す（設計書 9.3）。
+
+    音数の多い組み合わせから順に試し、1つでも押さえられる形が見つかった時点で
+    その音数の組み合わせすべてを候補として返す（音数が同じなら、あとはコストで比較する）。
+    """
+    note_count = len(event.midis)
+    for size in range(note_count - 1, 0, -1):
+        placements: list[EventPlacement] = []
+        for combo in itertools.combinations(range(note_count), size):
+            sub_event = _Event(
+                noteIndices=tuple(event.noteIndices[i] for i in combo),
+                midis=tuple(event.midis[i] for i in combo),
+                tied=False,
+                availableBeats=event.availableBeats,
+            )
+            dropped = tuple(event.noteIndices[i] for i in range(note_count) if i not in combo)
+            for placement in _generate_exact_placements(sub_event, tuning, state, weights):
+                placements.append(
+                    EventPlacement(
+                        candidates=placement.candidates,
+                        handPosition=placement.handPosition,
+                        barreFret=placement.barreFret,
+                        droppedNoteIndices=dropped,
+                    )
+                )
+        if placements:
+            placements.sort(key=lambda item: event_base_cost(item, weights))
+            return placements[:MAX_PLACEMENTS_PER_EVENT]
+    return []
+
+
+def _generate_exact_placements(
+    event: "_Event", tuning: Tuning, state: State, weights: ScoringWeights
+) -> list[EventPlacement]:
+    """イベントの全音を同時に押さえる形だけを列挙する（部分和音へのフォールバックなし）。"""
     if len(event.midis) == 1:
         return [
             EventPlacement(candidates=(candidate,), handPosition=candidate.handPosition)
@@ -553,9 +615,15 @@ def optimize(
     tuning: Tuning = STANDARD_TUNING,
     weights: ScoringWeights | None = None,
     notation_octave_shift: int = 0,
+    chord_drops: dict[int, set[int]] | None = None,
 ) -> OptimizationResult:
-    """音符列から最適な運指を求める（設計書 8.1 基本フロー）。"""
+    """音符列から最適な運指を求める（設計書 8.1 基本フロー）。
+
+    chord_drops は、和音イベントの先頭noteIndexをキーに、あえて鳴らさない
+    noteIndexの集合を指定する（設計書 9.3 の「別の押さえ方を選ぶ」機能）。
+    """
     weights = weights or ScoringWeights()
+    chord_drops = chord_drops or {}
     measure_map = {m.measureIndex: m for m in (measures or [])}
     onsets = _absolute_onsets(notes, measure_map)
     result = OptimizationResult()
@@ -588,6 +656,21 @@ def optimize(
             grouped[-1][2].append(fitted)
         else:
             grouped.append((onsets[index], [index], [fitted]))
+
+    if chord_drops:
+        # ユーザーが「この音は鳴らさない」と選んだ和音は、最初からその音を除いて
+        # 探索する（設計書 9.3）。全音を除いてしまう場合は何も残らないので
+        # イベント自体を作らない（対象の音は isDropped として扱われる）
+        filtered_grouped: list[tuple[float, list[int], list[int]]] = []
+        for onset, indices, midis in grouped:
+            drop = chord_drops.get(indices[0])
+            if not drop:
+                filtered_grouped.append((onset, indices, midis))
+                continue
+            kept = [(idx, midi) for idx, midi in zip(indices, midis) if idx not in drop]
+            if kept:
+                filtered_grouped.append((onset, [idx for idx, _ in kept], [midi for _, midi in kept]))
+        grouped = filtered_grouped
 
     if not grouped:
         result.warnings = range_warnings
@@ -643,12 +726,17 @@ def optimize(
     for index, note in enumerate(notes):
         entry = chosen.get(index)
         if entry is None:
+            # 休符はそもそも events に含まれないため常にここに来る。
+            # 一方、和音の一部として書かれていた音がここに来る場合は、
+            # 部分和音フォールバック（自動）か chord_drops（ユーザー選択）で
+            # 鳴らせなかったことを意味する
             result.fingerings.append(
                 Fingering(
                     noteIndex=index,
                     measureIndex=note.measureIndex,
                     onsetBeat=note.onsetBeat,
-                    isRest=True,
+                    isRest=note.isRest,
+                    isDropped=not note.isRest,
                 )
             )
             continue
@@ -703,6 +791,100 @@ def optimize(
             )
         )
 
+    # 部分和音フォールバックが使われたイベントには、選び直せる別の押さえ方を添える
+    # （設計書 9.3）。state_before は、そのイベントを弾く直前の左手の状態
+    replay_state = State.initial()
+    for event, placement in zip(events, path):
+        state_before = replay_state
+        replay_state = replay_state.advance_event(placement)
+        if not placement.droppedNoteIndices:
+            continue
+
+        head = notes[event.noteIndices[0]]
+        kept_count = len(event.midis) - len(placement.droppedNoteIndices)
+        range_warnings.append(
+            ConversionWarning(
+                noteIndex=event.noteIndices[0],
+                measureIndex=head.measureIndex,
+                onsetBeat=head.onsetBeat,
+                kind="partial_chord",
+                message=(
+                    f"{head.measureIndex + 1}小節目 {head.onsetBeat + 1:g}拍目: "
+                    f"{len(event.midis)}音を同時に押さえられないため、"
+                    f"{kept_count}音だけを鳴らしています"
+                ),
+                alternatives=_chord_alternatives(event, placement, tuning, weights, state_before),
+            )
+        )
+
     result.totalCost = total_cost
     result.warnings = range_warnings + _build_warnings(result.fingerings, weights, beats_map)
     return result
+
+
+def _placement_to_fingerings(
+    event: "_Event", placement: EventPlacement, tuning: Tuning
+) -> list[Fingering]:
+    """代替候補プレビュー用に、1イベント分のFingeringを組み立てる（休符・移動量は含めない）。"""
+    fingerings = []
+    for candidate in sorted(placement.candidates, key=lambda item: item.stringIndex):
+        fingerings.append(
+            Fingering(
+                noteIndex=candidate.noteIndex,
+                measureIndex=0,
+                onsetBeat=0.0,
+                isRest=False,
+                stringIndex=candidate.stringIndex,
+                stringLabel=tuning.labels[candidate.stringIndex],
+                fret=candidate.fret,
+                finger=candidate.finger,
+                position=placement.handPosition,
+                isBarre=placement.barreFret is not None and candidate.fret == placement.barreFret,
+                chordSize=len(placement.candidates),
+            )
+        )
+    return fingerings
+
+
+def _chord_alternatives(
+    event: "_Event",
+    chosen: EventPlacement,
+    tuning: Tuning,
+    weights: ScoringWeights,
+    state_before: State,
+) -> list[ChordAlternative]:
+    """部分和音フォールバックの候補一覧を、実際に選べる形として返す（設計書 9.3）。
+
+    音数が最大の候補群（_generate_partial_placements と同じ探索）から、
+    どの音を諦めるかが異なるものだけを重複なく数件取り出す。
+    """
+    candidates = _generate_partial_placements(event, tuning, state_before, weights)
+    alternatives: list[ChordAlternative] = []
+    seen_drop_sets: set[frozenset[int]] = set()
+
+    for placement in candidates:
+        drop_set = frozenset(placement.droppedNoteIndices)
+        if drop_set in seen_drop_sets:
+            continue
+        seen_drop_sets.add(drop_set)
+        alternatives.append(
+            ChordAlternative(
+                droppedNoteIndices=sorted(placement.droppedNoteIndices),
+                fingerings=_placement_to_fingerings(event, placement, tuning),
+                isCurrent=drop_set == frozenset(chosen.droppedNoteIndices),
+            )
+        )
+        if len(alternatives) >= 4:
+            break
+
+    if not any(alternative.isCurrent for alternative in alternatives):
+        alternatives.insert(
+            0,
+            ChordAlternative(
+                droppedNoteIndices=sorted(chosen.droppedNoteIndices),
+                fingerings=_placement_to_fingerings(event, chosen, tuning),
+                isCurrent=True,
+            ),
+        )
+
+    return alternatives

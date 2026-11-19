@@ -69,6 +69,9 @@ class ConvertSettings(BaseModel):
     measuresPerLine: int = 4
     # ギター譜は実音より1オクターブ高く記譜するため、既定で -1 オクターブして実音に変換する
     notationOctaveShift: int = -1
+    # 和音の一部を鳴らせない場合に、あえて鳴らさない音を指定する（設計書 9.3）。
+    # キーは和音イベントの先頭noteIndex（JSONのキーは文字列になるためstr）
+    chordDrops: dict[str, list[int]] = Field(default_factory=dict)
 
 
 class ConvertRequest(BaseModel):
@@ -93,6 +96,13 @@ class FingeringSchema(BaseModel):
     isTiedContinuation: bool = False
     isBarre: bool = False
     chordSize: int = 1
+    isDropped: bool = False
+
+
+class ChordAlternativeSchema(BaseModel):
+    droppedNoteIndices: list[int] = Field(default_factory=list)
+    fingerings: list[FingeringSchema] = Field(default_factory=list)
+    isCurrent: bool = False
 
 
 class WarningSchema(BaseModel):
@@ -101,6 +111,7 @@ class WarningSchema(BaseModel):
     onsetBeat: float
     kind: str
     message: str
+    alternatives: list[ChordAlternativeSchema] = Field(default_factory=list)
 
 
 class ConvertResponse(BaseModel):
