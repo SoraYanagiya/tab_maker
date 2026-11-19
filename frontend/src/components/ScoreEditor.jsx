@@ -42,6 +42,7 @@ export default function ScoreEditor({
   highlightedNoteId,
   onHoverNote,
   chordMode,
+  noteInputMode,
   width,
 }) {
   const containerRef = useRef(null)
@@ -282,6 +283,13 @@ export default function ScoreEditor({
       }
     }
 
+    // 操作モードでは、既存の音符の選択・ドラッグ以外の操作（新規音符の追加）は行わない。
+    // 空白部分をクリックした場合は選択解除のみ行う
+    if (!noteInputMode) {
+      onSelectionChange(null)
+      return
+    }
+
     const measure = findMeasureAt(position)
     if (!measure) {
       if (!chordInsertion) onSelectionChange(null)
@@ -358,7 +366,7 @@ export default function ScoreEditor({
 
   return (
     <div
-      className="score-canvas"
+      className={`score-canvas${noteInputMode ? '' : ' is-operation-mode'}`}
       ref={containerRef}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}

@@ -40,6 +40,25 @@ export default function Toolbar({
 }) {
   return (
     <div className="toolbar">
+      <div className="mode-switch" role="group" aria-label="編集モード">
+        <button
+          type="button"
+          className={`mode-button${!editorState.noteInputMode ? ' is-active' : ''}`}
+          title="操作モード (Esc) — 既存の音符の選択・ドラッグのみ行い、クリックでは音符を追加しない"
+          onClick={() => onEditorStateChange({ noteInputMode: false })}
+        >
+          操作
+        </button>
+        <button
+          type="button"
+          className={`mode-button${editorState.noteInputMode ? ' is-active' : ''}`}
+          title="音符入力モード — 五線のクリックで音符を追加する"
+          onClick={() => onEditorStateChange({ noteInputMode: true })}
+        >
+          音符入力
+        </button>
+      </div>
+
       <div className="toolbar-group">
         <span className="toolbar-label">音価</span>
         {DURATIONS.map((duration) => (
